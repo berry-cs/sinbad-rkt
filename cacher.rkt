@@ -2,6 +2,7 @@
 
 (require file/md5
          json
+         "dot-printer.rkt"
          "util.rkt")
 
 (module+ test
@@ -133,8 +134,37 @@
 
 
 ;; cacher string [input-port or #f] -> (list string [string or #f] [string or #f])
+#|      Reads the data (as bytes) from the given path (or already opened file
+        object) and stores it in a temporary file in the local cache directory
+        (using cache_byte_data). 
+        
+        Returns a triple of:
+         - the path to the cached data file
+         - an alternate name for the data (e.g. from content-disposition header)
+         - an encoding for the data if detected by raw_create_input.|#
+(define (read-and-cache c path [fp #f])
+  (define D (box #f))  ; dot-printer
+  
+  (dynamic-wind
+   (lambda ()
+     (when (and (not fp) (smells-like-url? path))
+       (set-box! D (dot-printer (format "Downloading ~a (this may take a moment" path)))))
+   
+   (lambda ()    ; try:
+     (match-define
+       (list actual-fp local-name encoding)
+       (if (not fp)
+           (raw-create-input path)
+           (list fp #f #f)))
+     
+     (define byte-data (port->bytes actual-fp))
+     (close-input-port actual-fp)
 
-
+     (define cached-file-path (cache-byte-data c path byte-data))
+     (list cached-file-path local-name encoding))
+   
+   (lambda ()     ; finally:
+     (when (unbox D) (stop-dot-printer (unbox D))))))
 
 
 
