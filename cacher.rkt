@@ -31,7 +31,7 @@
 
 (struct cacher (directory expiration))
 
-(define default-cacher (cacher DEFAULT-CACHE-DIR MINIMUM-TIMEOUT-VALUE))
+(define default-cacher (cacher DEFAULT-CACHE-DIR NEVER-RELOAD))
 
 ;; cacher string -> cacher
 ;; Returns an new cacher like c but with the given cache directory
@@ -168,7 +168,75 @@
 
 
 
+;; cacher string string -> string(path)
+#|      Returns a local path to the cached data for the given path+subtag.
+        
+        If caching is not enabled, or the path is already a local path, or
+        not cacheable for whatever reason, then the path is returned unchanged.
+        
+        If subtag is 'main', then the resource identified by path will be 
+        downloaded and cached if it is not already, or if it has become stale.
+        
+        If subtag is NOT 'main', but the path+subtag is not in the cache, 
+        then #f is returned.|#
+(define (resolve-path c path subtag)
+  (call/cc
+   (λ (return)
 
+     ; first make sure caching is enabled and that the path is not a local file
+     (when (or (not (and (sinbad-cache-enabled) (cacheable? c path subtag)))
+               ; and that the cache-index-file can be generated/read
+               (not (cache-index-file-path c path)))
+       (return path))
+
+     (define pre-e (cache-entry-for c path subtag))
+     (define e
+       (if (and pre-e (not (entry-data-valid? pre-e)))
+           (begin (clear-cache-data c path subtag)
+                  #f)
+           pre-e))
+
+     (define cache-path (and e (entry-data e)))
+
+     (cond
+       [(and (string-prefix? subtag "main")
+             (or (not cache-path)  ; not previously cached
+                                   ; or has expired...
+                 (and e (expired? e (cacher-expiration c)))))
+
+        (printf "Refreshing cache for: ~a (~a)~n" path subtag)
+        
+        (match-define
+          (list new-cache-path local-name encoding)
+          (read-and-cache c path))
+
+        (when cache-path    ; need to remove the old cached file
+          (delete-file cache-path))
+
+        (add-or-update-entry
+         c (entry path subtag new-cache-path (current-milliseconds)))
+
+        ; if local-name or enc were detected by raw_create_input via the read_and_cache function
+        ; then cache those as well
+        (when local-name
+          (printf "adding real-name ~a for ~a~n" local-name path)
+          (add-or-update-entry
+           c (entry path "real-name" local-name (current-milliseconds))))
+
+        (when encoding
+          (printf "adding encoding ~a for ~a~n" encoding path)
+          (add-or-update-entry
+           c (entry path "encoding" encoding (current-milliseconds))))
+
+        new-cache-path]
+
+       [(and (not (string-prefix? subtag "main"))
+             (and e (expired? e (cacher-expiration c))))
+        #f]
+
+       [else
+        (printf "Using previously cached data for: ~a (~a)~n" path subtag)
+        cache-path]))))
 
 
 
@@ -221,14 +289,13 @@
   (and (sinbad-cache-enabled)
        (or (not (string-prefix? subtag "main"))
            (and (smells-like-url? path)
-                (>= (cacher-expiration c) 0)))))
+                (not (= (cacher-expiration c) NEVER-CACHE))))))
 
 (module+ test
   (check-true (cacheable? default-cacher "http://cs.berry.edu" "main"))
   (check-true (cacheable? default-cacher "cacher.rkt" "schema"))
   
-  (check-false (cacheable? default-cacher "cacher.rkt" "main"))
-  )
+  (check-false (cacheable? default-cacher "cacher.rkt" "main")))
 
 
 ;; cacher  string  ->  path or false
@@ -282,7 +349,6 @@
 
 ;;;; ================ cache entry structure ===============================
 
-;; cachedata is a local file page
 ;; timestamp is in milliseconds
 (struct entry (tag subtag data timestamp) #:transparent)
 
@@ -350,14 +416,14 @@
 ;; Check to see if the given entry has expired (relative to current time).
 
 (define (expired? ent expiration)
-  (define diff (- (current-inexact-milliseconds)
+  (define diff (- (current-milliseconds)
                   (entry-timestamp ent)))
   (and (>= expiration 0)
        (> diff expiration)))
 
 (module+ test
-  (check-true (expired? (entry "aaa" "bbb" "blah" (- (current-inexact-milliseconds) 10))
+  (check-true (expired? (entry "aaa" "bbb" "blah" (- (current-milliseconds) 10))
                           5))
-  (check-false (expired? (entry "aaa" "bbb" "blah" (- (current-inexact-milliseconds) 10))
+  (check-false (expired? (entry "aaa" "bbb" "blah" (- (current-milliseconds) 10))
                           15)))
 
