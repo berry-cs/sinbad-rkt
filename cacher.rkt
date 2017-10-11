@@ -240,7 +240,39 @@
 
 
 
+;; cacher string string input-port -> boolean
+#|      Reads data from the given file object and stores it in the local
+        cache directory (using read_and_cache) and also updates the cache
+        index file accordingly.
+        
+        (This is sort of a simple, manual version of resolve_path.)
+        
+        Returns True if the whole procedure succeeded.|#
+(define (add-to-cache c path subtag fp)
+  (call/cc
+   (λ (return)
 
+     ; first make sure caching is enabled and that the path is not a local file
+     (when (or (not (sinbad-cache-enabled))
+               (= (cacher-expiration c) NEVER-CACHE)
+               (not (cache-index-file-path c path)))
+       (return #f))
+
+     (define e (cache-entry-for c path subtag))
+     (define cache-path (and e (entry-data e)))
+
+     (printf "Refreshing cache for: ~a (~a)~n" path subtag)
+
+     (match-define
+       (list new-cache-path _ _)
+       (read-and-cache c (format "~a (~a)" path subtag) fp))
+     
+     (when cache-path    ; need to remove the old cached file
+          (delete-file cache-path))
+     
+     (add-or-update-entry
+         c (entry path subtag new-cache-path (current-milliseconds)))
+     #t)))
 
 
 
