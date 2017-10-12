@@ -14,7 +14,8 @@
          default-cacher
          clear-cache
          update-timeout
-         update-directory)
+         update-directory
+         resolve-cache-path)
 
 ;; *parameter* to globally enable/disable caching behavior
 (define sinbad-cache-enabled (make-parameter #t (lambda (v) (equal? v #t))))
@@ -148,7 +149,7 @@
   (dynamic-wind
    (lambda ()
      (when (and (not fp) (smells-like-url? path))
-       (set-box! D (dot-printer (format "Downloading ~a (this may take a moment" path)))))
+       (set-box! D (dot-printer (format "Downloading ~a (this may take a moment)" path)))))
    
    (lambda ()    ; try:
      (match-define
@@ -179,7 +180,7 @@
         
         If subtag is NOT 'main', but the path+subtag is not in the cache, 
         then #f is returned.|#
-(define (resolve-path c path subtag)
+(define (resolve-cache-path c path subtag)
   (call/cc
    (λ (return)
 

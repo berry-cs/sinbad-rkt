@@ -53,13 +53,28 @@
   (define charset (box #f))
   (define local-name (box #f))
 
+  (define (location-header hdrs)
+    (define re #px"^[Ll]ocation:\\s+(.*)$")
+    (second (regexp-match re
+                          (findf (lambda (line) (regexp-match re line)) hdrs))))
+  
+  (define (get-port+headers/follow-redirects path)
+    (define-values (ip hdrs) (get-pure-port/headers (string->url path)
+                                                       (list "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36")
+                                                       #:status? #t))
+    (define hdr-lines (string-split hdrs #px"[\r\n]"))
+    (define code (string->number (second (regexp-match #px"^\\S+ (\\d+) " (first hdr-lines)))))
+    (cond
+      [(member code '(301 302 307 308))
+       (get-port+headers/follow-redirects (location-header hdr-lines))]
+      [else (values ip hdrs)]))
+  
   (define fp
     (cond
       [(or (not path)
            (not (string? path))) #f]
       [(smells-like-url? path)
-       (define-values (ip hdrs) (get-pure-port/headers (string->url path)
-                                                       (list "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36")))
+       (define-values (ip hdrs) (get-port+headers/follow-redirects path))
        (for ([h (string-split hdrs #px"[\r\n]")])
          (define R1 (regexp-match #px"^[Cc]ontent-[Dd]isposition.*filename=\"?([^\\s\"]*)\"?" h))
          (define R2 (regexp-match #px"^Content-Type:.*charset=\"?([^\\s\"]*)\"?" h))
