@@ -1,6 +1,6 @@
 #lang racket
 
-(provide all-defined-out)
+(provide (all-defined-out))
 
 #|
 Generic interface for plug-in modules
@@ -73,20 +73,10 @@ based on whether the path name contains .csv or .tsv).
    (define (da-get-option da k) #f)
    (define (da-set-option! da k v) (void))
    (define (da-load-data da fp [enc #f])
-     (define D (box #f))
-     
-     (dynamic-wind
-      (lambda ()
-        (set-box! D (dot-printer (format "Loading data (this may take a moment)"))))
-   
-      (lambda ()    ; try:
-        (if enc
-            (parameterize ([current-locale enc])
-              (read-json fp))
-            (read-json fp)))
-
-      (lambda ()     ; finally:
-        (when (unbox D) (stop-dot-printer (unbox D))))))])
+     (if enc
+         (parameterize ([current-locale enc])
+           (read-json fp))
+         (read-json fp)))])
 
 
 
@@ -230,3 +220,36 @@ based on whether the path name contains .csv or .tsv).
                              (sort (random-sample (length obj) max-elts #:replacement? #f) <))))
      (map (lambda (v) (sample-data v max-elts)) top-sample)]
     [else obj]))
+
+
+
+#|
+
+(require sxml/ssax/SSAX-code)
+(require srfi/13/string)
+
+((ssax:make-parser
+   NEW-LEVEL-SEED 
+   (lambda (elem-gi attributes namespaces
+                    expected-content seed)
+     '())
+   FINISH-ELEMENT
+   (lambda (elem-gi attributes namespaces parent-seed seed)
+      (let ((seed (ssax:reverse-collect-str-drop-ws seed)))
+        (cons
+         (list 
+          (if (symbol? elem-gi) elem-gi
+              (RES-NAME->SXML elem-gi))
+          attributes
+          seed)
+         parent-seed)))
+
+   CHAR-DATA-HANDLER
+   (lambda (string1 string2 seed)
+     (if (string-null? string2) (cons string1 seed)
+         (cons* string2 string1 seed)))
+   )
+   (open-input-string
+    "<zippy><pippy pigtails=\"2\">ab duh\n</pippy>cd</zippy>")
+   '())
+|#

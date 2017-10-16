@@ -12,7 +12,9 @@
          NEVER-RELOAD
          sinbad-cache-enabled
          default-cacher
-         clear-cache
+         clear-entire-cache
+         lookup-entry-data
+         stale?
          update-timeout
          update-directory
          resolve-cache-path)
@@ -308,7 +310,7 @@
 
 
 ;; Delete the entire cache directory being maintained by the given cacher
-(define (clear-cache c)
+(define (clear-entire-cache c)
   (when (directory-exists? (cacher-directory c))
     (delete-directory/files (cacher-directory c))))
 
