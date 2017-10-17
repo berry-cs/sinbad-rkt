@@ -39,7 +39,7 @@
 (define data-source%
   (class object%
     (super-new)
-    (inspect #f)
+    ;(inspect #f)
     
     (init-field name
                 path
@@ -115,7 +115,7 @@
       '())   ; TODO
 
 
-    (define/public (load [force-reload? #f])
+    (define/public (load! [force-reload? #f])
       (when (not connected?) (sinbad-error (format "not connected: ~a" path)))
       (when (not (ready-to-load?)) (sinbad-error (format "not ready to load; missing params: ~a" (missing-params))))
 
@@ -159,7 +159,7 @@
                                          enc))
             (set! sampled? #f)
             (set! loaded? #t)
-            (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until .load() is called again
+            (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until (load!) is called again
             )
 
           (lambda ()     ; finally:
@@ -171,9 +171,218 @@
          
          this]))
 
+
+    
+    (define/public (fetch-all)
+      (unless (has-data?) (sinbad-error "no data available - make sure you called (load!)"))
+      the-data)
+
+
+    (define/public (fetch #:base-path [base-path #f] #:select [select #f] #:apply [func 'dict] . field-paths)
+
+      ;; TODO - extract common base path if needed from field-paths
+
+      (define base-path-fields (if base-path
+                                   (string-split base-path "/")
+                                   '()))
+
+      (define field-paths-split
+        (map (λ(fp)
+               (define splitted (string-split fp "/"))
+               (if (= 1 (length splitted))
+                   (first splitted)
+                   (cons 'path splitted))) field-paths))
+      
+      (define sig
+        (cons func
+              (if (and (symbol? func) (eq? func 'dict))
+                  (map list field-paths field-paths-split)
+                  field-paths-split)))
+
+      (define final-sig
+        (if base-path-fields
+            `(path ,@base-path-fields (,sig))
+            `(,sig)))
+
+      (write final-sig) (newline)
+      
+      (real-unify (fetch-all) final-sig select #f))
+
     
     ))
 
+(define A
+  (send* (sinbad-connect "http://services.faa.gov/airport/status/ATL?format=application/json")
+    (load!)
+    (fetch-all)))
+
+(define B
+  (send* (sinbad-connect "https://github.com/tamingtext/book/raw/master/apache-solr/example/exampledocs/books.json")
+    (load!)
+    (fetch-all)))
+
+(define E
+  (send* (sinbad-connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
+    (load!)
+    (fetch-all)))
+
+(require racket/date)
+(struct quake (title time mag) #:transparent)
+
+
+
+#;(unify E `(path "features" "properties" (dict ("description" "title") "time" (magnitude "mag"))))
+#;(unify E `(path "features" "properties" (,quake "title" (,seconds->date "time") "mag")))
+#;(unify E `(path "features" "properties" (,quake "title" (,date->string (,seconds->date "time")) "mag")))
+#;(unify E `(path "features" "properties"
+                  (,quake "title"
+                          (,date->string
+                           (,seconds->date (,/ "time" (value 1000)))
+                           (value #t))
+                          "mag")))
+
+
+
+(require racket/random)
+
+;; unify : jsexpr sig [integer? or #f or 'random or ...TODO]  -> (list any)
+(define (unify data sig [select #f] [as-list #f])
+  (real-unify data sig select as-list))
+
+(define (real-unify data sig select as-list)
+  
+  (define (apply-select ds select)
+    (match select
+      [(? nonnegative-integer? i)  (list-ref ds i)]
+      [(? negative-integer? i) (list-ref ds (+ (length ds) i))]
+      ['random (random-ref ds)]
+      [#f (list-ref ds 0)]))
+
+  (define upd-select   ; "use-up" the select index
+    (match select
+      ['random select]      ; let 'random flow through
+      [_ #f]))
+
+  
+  (match sig
+
+    [(list (? procedure? f) ss ...)
+     (printf "apply ~a to:\n~a\n" (object-name f) ss)
+     (match data
+       [(list ds ...)
+        (if as-list
+            (flatten (map (λ(d) (real-unify d sig select as-list)) ds))
+            (real-unify (apply-select ds select) sig upd-select as-list))]
+       [(? dict? _)
+        (define p-unif (map (λ (s) (real-unify data s select as-list)) ss))
+        (apply f p-unif) ])]
+
+    
+    [(list 'dict ss ...)
+     (printf "dict of ~a~n" ss)
+     (match data
+       [(list ds ...)
+        (if as-list
+            (flatten (map (λ(d) (real-unify d sig select as-list)) ds))
+            (real-unify (apply-select ds select) sig upd-select as-list))]
+       [(? dict? _)
+        (define assocs (map (λ(sub)
+                              (define-values (n s)
+                                (match sub
+                                  [(list n s) (values n s)]
+                                  [(? string? s) (values s s)]))
+                              (cons (if (symbol? n) n (string->symbol n))
+                                    (real-unify data s select as-list)))
+                            ss))
+        (make-hasheq assocs)])]
+
+    
+    [(list 'path p ps ... s)
+     (printf "traverse ~a ~a~n" p ps)
+
+     (define (traverse data path)
+       (match data
+         [(? dict? _) (dict-ref data (if (symbol? p) p (string->symbol p)))]
+         [(? list? _) (map (λ(d) (traverse d path)) data)]
+         [else (sinbad-error (format "no path to ~a ~a" p ps))]))
+
+     (define p-data (traverse data p))
+       
+     (if (cons? ps)
+         (real-unify p-data (append (cons 'path ps) (list s)) select as-list)
+         (real-unify p-data s select as-list))]
+
+
+    [(list 'value v) v]
+
+    
+    [(list s)
+     (define result
+       (match data
+         [(list ds ...)
+          (printf "collecting list~n")
+          (map (λ (d) (real-unify d s select #t)) ds)]
+         [_
+          (printf "wrapping list~n")
+          (real-unify data s select #t)]))
+     (flatten result)]
+
+    
+    [(? string? p)
+     (printf "contents of ~a~n" p)
+     (define result
+       (match data
+         [(or (? string? _) (? boolean? _) (? number? _)) data]
+         [(? dict? _) (dict-ref data (string->symbol p))]
+         [(? list? _) (real-unify (apply-select data select) sig upd-select as-list)]
+         [else (sinbad-error "not primitive data")]))
+     result]))
+
+
+(struct book (title author info) #:transparent)
+(struct info (genre categories) #:transparent)
+
+
+
+#|
+
+[ { "airport" : "Hartsfield-....",      ; /name
+    "conditions" : "Mostly Cloudy",     ; /weather/weather
+    "vis"     : 10.0                    ; /weather/visibility ( number )
+    "status"  : "No known delays" } ]   ; /status/reason
+
+
+(fetch `( #hasheq((airport . "")
+
+
+
+
+sig :=    (list <sig>)
+     |    (list <function> <sig> ...)
+     |    (list 'dict (<name> <sig>) ...)
+     |    (list 'path <sig>)
+     |    <path-string>
+
+
+
+
+
+(struct book (title author info))
+(struct info (genre categories))
+
+
+(fetch (list (list make-book "name" "author" (list make-info "genre_s" "cat"))))
+
+==>
+
+(list (make-book "The Lightning Thief" "Rick Riordan" (make-info "fantasy" (list "book" "hardcover")))
+      (make-book "The Sea of Monsters" ...            (make-info ... ))
+      ...
+      (make-book "Lucene in Action,..." "Michael Mc..." (make-info "IT" (list "book" "paperback"))))
+
+
+
+|#
 
 
 #|
