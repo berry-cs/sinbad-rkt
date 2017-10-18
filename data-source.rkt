@@ -261,6 +261,14 @@
         (if (dict? unwrapped-data)
             (map symbol->string (dict-keys unwrapped-data))
             '())))
+
+
+    (define/public (data-length [base-path #f])
+      (unless (has-data?) (sinbad-error "no data available - make sure you called (load)"))
+
+      (with-handlers ([exn:fail? (λ (e) '())])
+        (define data (if base-path (fetch base-path) (fetch)))
+        (if (list? data) (length data) 0)))
     
     ))
 
