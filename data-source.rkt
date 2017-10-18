@@ -33,12 +33,12 @@
    (for/first ([p *predefined-plugins*]
                #:when (or (and type-ext (string=? type-ext (dict-ref p 'type-ext)))
                           (and (not type-ext) (matched-by? (dict-ref p 'data-infer) path))))
-    (new data-source% (name path) (path path) (type-ext type-ext) (plugin p)))
+     (new data-source% (name path) (path path) (type-ext type-ext) (plugin p)))
    
    (error
     (if type-ext
-       (format "no data source plugin for type ~a" type-ext)
-       (format "could not infer data format for ~a" path)))))
+        (format "no data source plugin for type ~a" type-ext)
+        (format "could not infer data format for ~a" path)))))
 
 
 (struct exn:fail:sinbad exn:fail ()
@@ -88,7 +88,7 @@
     ; all the following hash tables assume *symbols* as the key
     
     (define option-settings (hasheq))  ; generic options for the data-source; the data-factory
-                                       ; also maintains its own set of options
+    ; also maintains its own set of options
 
     ; params are connection-related parameters,
     ; either in a query string or filling in part of the path
@@ -201,36 +201,74 @@
     
 
     (define/public (fetch #:base-path [base-path #f] #:select [select #f] #:apply [func 'dict] . field-paths)
-
-      (define-values (pref field-paths-suf)
-        (if (andmap string? field-paths)
-            (extract-common-prefix field-paths)
-            (values "" field-paths)))
+      (cond
+        [(empty? field-paths)
+         (if base-path
+             (fetch #:select select #:apply func base-path)
+             (apply-select (fetch-all) select))]
+         
+        [else 
+         (define-values (pref field-paths-suf)
+           (if (andmap string? field-paths)
+               (extract-common-prefix (map trim/ field-paths))
+               (values "" (map trim/ field-paths))))
       
-      (define pref-split (string-split pref "/"))
+         (define pref-split (string-split pref "/"))
       
-      (define base-path-fields (append
-                                (if base-path
-                                    (string-split base-path "/")
-                                    '())
-                                pref-split))
+         (define base-path-fields (append
+                                   (if base-path
+                                       (string-split base-path "/")
+                                       '())
+                                   pref-split))
 
-      (define field-paths-split
-        (map (λ(fp)
-               (cond
-                 [(string? fp)
-                  (define splitted (string-split fp "/"))
-                  (if (= 1 (length splitted))
-                      (first splitted)
-                      (cons 'path splitted))]
-                 [else fp])) field-paths-suf))
+         (define field-paths-split
+           (map (λ(fp)
+                  (cond
+                    [(string? fp)
+                     (define splitted (string-split fp "/"))
+                     (if (= 1 (length splitted))
+                         (first splitted)
+                         (cons 'path splitted))]
+                    [else fp])) field-paths-suf))
 
-      (define final-sig
-        (apply build-sig `(,(not select) ,func ,base-path-fields ,@field-paths-split)))
-      (printf "final-sig: ~s~n" final-sig)
-      (real-unify (fetch-all) final-sig select #f))
+         (define final-sig
+           (apply build-sig (not select) func base-path-fields field-paths-split))
+         (dprintf "final-sig: ~s~n" final-sig)
+         (real-unify (fetch-all) final-sig select #f)]))
+
+
+    
+    (define/public (has-fields? #:base-path [base-path #f] . field-paths)
+      (unless (has-data?) (sinbad-error "no data available - make sure you called (load)"))
+      
+      (with-handlers ([exn:fail? (λ (e) #f)])
+        (send/apply this fetch #:base-path base-path field-paths)
+        #t))
+
+
+    (define/public (field-list [base-path #f])
+      (unless (has-data?) (sinbad-error "no data available - make sure you called (load)"))
+
+      (with-handlers ([exn:fail? (λ (e) '())])
+        (define data (if base-path (fetch base-path) (fetch)))
+
+        (define unwrapped-data
+          (let LOOP ([d data])
+            (if (list? d)
+                (LOOP (first d))
+                d)))
+
+        (if (dict? unwrapped-data)
+            (map symbol->string (dict-keys unwrapped-data))
+            '())))
     
     ))
+
+
+
+(define (trim/ s)
+  (cond [(string? s) (string-trim s "/")]
+        [else s]))
 
 
 
@@ -284,7 +322,11 @@
       [(and func-default? (= 1 (length field-paths)))
        (first field-paths)]
       [func-default?
-       (cons func (map list field-paths field-paths))] ; pairs up for 'dict: (list "path" "path" )
+       (define dict-keys (map (λ (fp) (match fp
+                                        [(list 'path fps ...) (string-join fps "-")]
+                                        [_ fp]))
+                              field-paths))
+       (cons func (map list dict-keys field-paths))] ; pairs up for 'dict: (list "path" "path" )
       [else
        (cons func field-paths)]))
 
@@ -348,7 +390,16 @@
 
 
 
-
+(define (apply-select ds select)
+  (if (not (list? ds))
+      ds
+      (match select
+        [(? nonnegative-integer? i)  (list-ref ds i)]
+        [(? negative-integer? i)     (list-ref ds (+ (length ds) i))]
+        ['random                     (random-ref ds)]
+        [(list (? nonnegative-integer? i) is ...) (list-ref ds i)]
+        [(list (? negative-integer? i) is ...)    (list-ref ds (+ (length ds) i))]
+        [#f                          (list-ref ds 0)])))
 
 #|
 sig :=    (list <sig>)
@@ -363,28 +414,14 @@ sig :=    (list <sig>)
   (real-unify data sig select as-list))
 
 (define (real-unify data sig select as-list)
-  
-  (define (apply-select ds select)
-    (if (not (list? ds))
-        ds
-        (match select
-          [(? nonnegative-integer? i)  (list-ref ds i)]
-          [(? negative-integer? i)     (list-ref ds (+ (length ds) i))]
-          ['random                     (random-ref ds)]
-          [(list (? nonnegative-integer? i) is ...) (list-ref ds i)]
-          [(list (? negative-integer? i) is ...)    (list-ref ds (+ (length ds) i))]
-          [#f                          (list-ref ds 0)])))
-
   (define upd-select   ; "use-up" the select index
     (match select
       [(list x) #f]
       [(list x xs ...) xs]
       ['random select]      ; let 'random flow through
       [_ #f]))
-
   
   (match sig
-
     [(list (? procedure? f) ss ...)
      (dprintf "apply ~a to:\n~a\n" (object-name f) ss)
      (match data
@@ -410,7 +447,9 @@ sig :=    (list <sig>)
                                 (match sub
                                   [(list n s) (values n s)]
                                   [(? string? s) (values s s)]))
-                              (cons (if (symbol? n) n (string->symbol n))
+                              (cons (cond
+                                      [(symbol? n) n]
+                                      [(string? n) (string->symbol n)])
                                     (real-unify data s select as-list)))
                             ss))
         (make-hasheq assocs)])]
