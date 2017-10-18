@@ -1,17 +1,31 @@
 #lang racket
 
-(require net/uri-codec)
+
+(require net/uri-codec
+         racket/random)
 (require "cacher.rkt"
          "dot-printer.rkt"
          "plugin.rkt"
          "util.rkt")
+
+(module+ test
+  (require rackunit))
+
+
+
+(provide data-source%
+         (struct-out exn:fail:sinbad)
+         connect)
+
+
+
 
 (define *predefined-plugins*
   (list (hasheq 'name "JSON (built-in)" 'type-ext "json" 
                 'data-infer (json-infer) 'data-factory json-access)))
 
 
-(define (sinbad-connect path [data-format #f])
+(define (connect path [data-format #f])
   (define type-ext (and data-format (string-downcase data-format)))
 
   (or
@@ -34,6 +48,13 @@
 (define-syntax sinbad-error
   (syntax-rules ()
     [(sinbad-error msg) (raise (make-exn:fail:sinbad msg (current-continuation-marks)))]))
+
+
+(define *debug* #f)
+
+(define-syntax dprintf
+  (syntax-rules ()
+    [(dprintf blah ...) (when *debug* (printf blah ...))]))
 
 
 (define data-source%
@@ -115,7 +136,7 @@
       '())   ; TODO
 
 
-    (define/public (load! [force-reload? #f])
+    (define/public (load [force-reload? #f])
       (when (not connected?) (sinbad-error (format "not connected: ~a" path)))
       (when (not (ready-to-load?)) (sinbad-error (format "not ready to load; missing params: ~a" (missing-params))))
 
@@ -159,7 +180,7 @@
                                          enc))
             (set! sampled? #f)
             (set! loaded? #t)
-            (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until (load!) is called again
+            (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until (load) is called again
             )
 
           (lambda ()     ; finally:
@@ -174,56 +195,140 @@
 
     
     (define/public (fetch-all)
-      (unless (has-data?) (sinbad-error "no data available - make sure you called (load!)"))
+      (unless (has-data?) (sinbad-error "no data available - make sure you called (load)"))
       the-data)
 
+    
 
     (define/public (fetch #:base-path [base-path #f] #:select [select #f] #:apply [func 'dict] . field-paths)
 
-      ;; TODO - extract common base path if needed from field-paths
-
-      (define base-path-fields (if base-path
-                                   (string-split base-path "/")
-                                   '()))
+      (define-values (pref field-paths-suf)
+        (if (andmap string? field-paths)
+            (extract-common-prefix field-paths)
+            (values "" field-paths)))
+      
+      (define pref-split (string-split pref "/"))
+      
+      (define base-path-fields (append
+                                (if base-path
+                                    (string-split base-path "/")
+                                    '())
+                                pref-split))
 
       (define field-paths-split
         (map (λ(fp)
-               (define splitted (string-split fp "/"))
-               (if (= 1 (length splitted))
-                   (first splitted)
-                   (cons 'path splitted))) field-paths))
-      
-      (define sig
-        (cons func
-              (if (and (symbol? func) (eq? func 'dict))
-                  (map list field-paths field-paths-split)
-                  field-paths-split)))
+               (cond
+                 [(string? fp)
+                  (define splitted (string-split fp "/"))
+                  (if (= 1 (length splitted))
+                      (first splitted)
+                      (cons 'path splitted))]
+                 [else fp])) field-paths-suf))
 
       (define final-sig
-        (if base-path-fields
-            `(path ,@base-path-fields (,sig))
-            `(,sig)))
-
-      (write final-sig) (newline)
-      
+        (apply build-sig `(,(not select) ,func ,base-path-fields ,@field-paths-split)))
+      (printf "final-sig: ~s~n" final-sig)
       (real-unify (fetch-all) final-sig select #f))
-
     
     ))
 
+
+
+;; (listof string) -> values string (listof string)
+(define (extract-common-prefix paths)
+  ; idea from Python source code for commonprefix()
+  (cond
+    [(empty? paths) (values "" paths)]
+    [else
+     (define sorted-p (sort paths string<=?))
+     (define min-p (string->list (first sorted-p)))
+     (define max-p (string->list (last sorted-p)))
+     (define pref (take-common-prefix min-p max-p char=?))
+
+     (define slash-position 
+       (for/first ([c (reverse pref)]
+                   [i (in-naturals)]
+                   #:when (char=? c #\/))
+         i))
+
+     (if (not slash-position)
+         (values "" paths)
+         (let* ([s (list->string pref)]
+                [pos (- (string-length s) slash-position)]
+                [prefix (substring s 0 pos)])
+           (values prefix
+                   (map (λ(p) (substring p pos)) paths))))]))
+
+
+(module+ test
+  (check-equal? (let-values ([(a b) (extract-common-prefix (list "a" "b" "c"))]) (list a b))
+                (list "" (list "a" "b" "c")))
+  (check-equal? (let-values ([(a b) (extract-common-prefix (list "a/a" "b/a" "c/a"))]) (list a b))
+                (list "" (list "a/a" "b/a" "c/a")))
+  (check-equal? (let-values ([(a b) (extract-common-prefix (list "z/a/a" "z/b/a" "z/c"))]) (list a b))
+                (list "z/" (list "a/a" "b/a" "c")))
+  (check-equal? (let-values ([(a b) (extract-common-prefix (list "zx/qyc" "zx/qya/a" "zx/qyai/gh" "zx/qyb/a" ))]) (list a b))
+                (list "zx/" (list "qyc" "qya/a" "qyai/gh" "qyb/a" )))
+  (check-equal? (let-values ([(a b) (extract-common-prefix (list "zx/q/yc" "zx/q/ya/a" "zx/q/yai/gh" "zx/q/yb/a" ))]) (list a b))
+                (list "zx/q/" (list "yc" "ya/a" "yai/gh" "yb/a" )))
+  )
+
+
+
+;; build-sig : proc? (listof <path-string>) [(listof <sig>)] -> <sig>
+(define (build-sig as-list? func base-path . field-paths)
+  (define func-default? (and (symbol? func) (eq? func 'dict)))
+  
+  (define sig
+    (cond
+      [(and func-default? (= 1 (length field-paths)))
+       (first field-paths)]
+      [func-default?
+       (cons func (map list field-paths field-paths))] ; pairs up for 'dict: (list "path" "path" )
+      [else
+       (cons func field-paths)]))
+
+  (define (wrap-if-list s)
+    (if as-list? (list s) s))
+  
+  (define final-sig
+    (if (empty? base-path)
+        (wrap-if-list sig)
+        `(path ,@base-path ,(wrap-if-list sig))))
+
+  final-sig)
+
+
+(module+ test
+  (check-equal? (build-sig #t 'dict (list "features" "properties") "title")
+                `(path "features" "properties" ("title")))  ; ((dict ("title" "title"))))
+  (check-equal? (build-sig #f 'dict (list "features" "properties") "title")
+                `(path "features" "properties" "title"))
+  (check-equal? (build-sig #t 'dict (list "features" "properties") "title" "time")
+                `(path "features" "properties" ((dict ("title" "title") ("time" "time")))))
+  (check-equal? (build-sig #t quake (list "features" "properties")
+                           "title"
+                           (list seconds->date "time")
+                           "mag")
+                `(path "features" "properties" ((,quake "title" (,seconds->date "time") "mag"))))
+  
+  (check-equal? 2 (+ 1 1)))
+
+
+
 (define A
-  (send* (sinbad-connect "http://services.faa.gov/airport/status/ATL?format=application/json")
-    (load!)
+  (send* (connect "http://services.faa.gov/airport/status/ATL?format=application/json")
+    (load)
     (fetch-all)))
 
 (define B
-  (send* (sinbad-connect "https://github.com/tamingtext/book/raw/master/apache-solr/example/exampledocs/books.json")
-    (load!)
+  (send* (connect "https://github.com/tamingtext/book/raw/master/apache-solr/example/exampledocs/books.json")
+    (load)
     (fetch-all)))
 
 (define E
-  (send* (sinbad-connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
-    (load!)
+  (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
+    (load)
     (fetch-all)))
 
 (require racket/date)
@@ -243,7 +348,15 @@
 
 
 
-(require racket/random)
+
+
+#|
+sig :=    (list <sig>)
+     |    (list <function> <sig> ...)
+     |    (list 'dict (<name> <sig>) ...)
+     |    (list 'path <sig>)
+     |    <path-string>
+|#
 
 ;; unify : jsexpr sig [integer? or #f or 'random or ...TODO]  -> (list any)
 (define (unify data sig [select #f] [as-list #f])
@@ -252,14 +365,20 @@
 (define (real-unify data sig select as-list)
   
   (define (apply-select ds select)
-    (match select
-      [(? nonnegative-integer? i)  (list-ref ds i)]
-      [(? negative-integer? i) (list-ref ds (+ (length ds) i))]
-      ['random (random-ref ds)]
-      [#f (list-ref ds 0)]))
+    (if (not (list? ds))
+        ds
+        (match select
+          [(? nonnegative-integer? i)  (list-ref ds i)]
+          [(? negative-integer? i)     (list-ref ds (+ (length ds) i))]
+          ['random                     (random-ref ds)]
+          [(list (? nonnegative-integer? i) is ...) (list-ref ds i)]
+          [(list (? negative-integer? i) is ...)    (list-ref ds (+ (length ds) i))]
+          [#f                          (list-ref ds 0)])))
 
   (define upd-select   ; "use-up" the select index
     (match select
+      [(list x) #f]
+      [(list x xs ...) xs]
       ['random select]      ; let 'random flow through
       [_ #f]))
 
@@ -267,7 +386,7 @@
   (match sig
 
     [(list (? procedure? f) ss ...)
-     (printf "apply ~a to:\n~a\n" (object-name f) ss)
+     (dprintf "apply ~a to:\n~a\n" (object-name f) ss)
      (match data
        [(list ds ...)
         (if as-list
@@ -279,7 +398,7 @@
 
     
     [(list 'dict ss ...)
-     (printf "dict of ~a~n" ss)
+     (dprintf "dict of ~a~n" ss)
      (match data
        [(list ds ...)
         (if as-list
@@ -298,7 +417,7 @@
 
     
     [(list 'path p ps ... s)
-     (printf "traverse ~a ~a~n" p ps)
+     (dprintf "traverse ~a ~a~n" p ps)
 
      (define (traverse data path)
        (match data
@@ -320,20 +439,21 @@
      (define result
        (match data
          [(list ds ...)
-          (printf "collecting list~n")
+          (dprintf "collecting list~n")
           (map (λ (d) (real-unify d s select #t)) ds)]
          [_
-          (printf "wrapping list~n")
+          (dprintf "wrapping list~n")
           (real-unify data s select #t)]))
      (flatten result)]
 
     
     [(? string? p)
-     (printf "contents of ~a~n" p)
+     (dprintf "contents of ~a at ~a~n" p data)
      (define result
        (match data
          [(or (? string? _) (? boolean? _) (? number? _)) data]
-         [(? dict? _) (dict-ref data (string->symbol p))]
+         [(? dict? _) (let ([r (dict-ref data (string->symbol p))])
+                        (if select (apply-select r select) r))]
          [(? list? _) (real-unify (apply-select data select) sig upd-select as-list)]
          [else (sinbad-error "not primitive data")]))
      result]))
@@ -342,65 +462,19 @@
 (struct book (title author info) #:transparent)
 (struct info (genre categories) #:transparent)
 
+(define B2
+  (send* (connect "https://github.com/tamingtext/book/raw/master/apache-solr/example/exampledocs/books.json")
+    (load)
+    (fetch #:select 0 #:apply book "name" "author" (list info "genre_s" "cat"))))
 
+(define E2
+  (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
+    (load)
+    (fetch "properties/title" "geometry/coordinates" "properties/mag"
+           #:apply quake #:base-path "features" #:select 0)))
 
-#|
+(define E3
+  (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
+    (load)
+    (fetch "properties/title" "geometry/coordinates" "properties/mag" #:apply quake #:base-path "features" #:select '(1 -1))))
 
-[ { "airport" : "Hartsfield-....",      ; /name
-    "conditions" : "Mostly Cloudy",     ; /weather/weather
-    "vis"     : 10.0                    ; /weather/visibility ( number )
-    "status"  : "No known delays" } ]   ; /status/reason
-
-
-(fetch `( #hasheq((airport . "")
-
-
-
-
-sig :=    (list <sig>)
-     |    (list <function> <sig> ...)
-     |    (list 'dict (<name> <sig>) ...)
-     |    (list 'path <sig>)
-     |    <path-string>
-
-
-
-
-
-(struct book (title author info))
-(struct info (genre categories))
-
-
-(fetch (list (list make-book "name" "author" (list make-info "genre_s" "cat"))))
-
-==>
-
-(list (make-book "The Lightning Thief" "Rick Riordan" (make-info "fantasy" (list "book" "hardcover")))
-      (make-book "The Sea of Monsters" ...            (make-info ... ))
-      ...
-      (make-book "Lucene in Action,..." "Michael Mc..." (make-info "IT" (list "book" "paperback"))))
-
-
-
-|#
-
-
-#|
-
-(new (class object%
-    (super-new)
-    (inspect #f)
-    (init turnip
-          [(internal-potato potato)]
-          [carrot 'good]
-          [(internal-rutabaga rutabaga) 'okay])
-    (field
-     [serious 0]
-     [(yo-ho stuff) (format "~a ~a ~a ~a"
-                                  turnip internal-potato carrot internal-rutabaga)]
-      ))
-      (turnip "blah")
-      (potato 42)
-      )
-
-|#
