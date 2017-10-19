@@ -25,7 +25,7 @@
                 'data-infer (json-infer) 'data-factory json-access)))
 
 
-(define (connect path [data-format #f])
+(define (connect path #:format [data-format #f])
   (define type-ext (and data-format (string-downcase data-format)))
 
   (or
@@ -39,6 +39,15 @@
     (if type-ext
         (format "no data source plugin for type ~a" type-ext)
         (format "could not infer data format for ~a" path)))))
+
+
+; key is string
+; type is either 'path or 'query
+; description is string
+(struct param (key type description required?))
+
+(define (make-param key type [desc #f] [req? #f])
+  (param key type desc req?))
 
 
 (struct exn:fail:sinbad exn:fail ()
@@ -109,11 +118,13 @@
 
       (define param-keys (sort (dict-keys param-values)  (λ (s1 s2) (string<=? (symbol->string s1)
                                                                                (symbol->string s2)))))
+      
       ; sort so that the URL doesn't differ, forcing a cache refresh unnecessarily because of reordering of dictionary keys
       (define query-params
-        (for/list ([k param-keys])
+        (for/list ([k param-keys]
+                   #:when (let ([prm (dict-ref params k #f)])
+                            (or (not prm) (eq? 'query (param-type prm)))))
           (define v (dict-ref param-values k))
-          ; TODO -- only use   query-params *********************
           (cons k v)))
 
       (define full-path-non-subst
@@ -121,10 +132,16 @@
             path
             (string-append path "?" (alist->form-urlencoded query-params))))
 
-      ; TODO: substitute path params **********
-      (define full-path full-path-non-subst)
-
-      full-path)
+      (define full-path-subst
+        (for/fold ([cur-path full-path-non-subst])
+                  ([k param-keys]
+                   #:when (let ([prm (dict-ref params k #f)])
+                            (and prm (eq? 'path (param-type prm)))))
+          (define k-str (symbol->string k))
+          (define v (dict-ref param-values k))
+          (string-replace cur-path (string-append "@{" k-str "}") v)))
+      
+      full-path-subst)
 
     
     (define/private (ready-to-load?)
@@ -133,12 +150,17 @@
 
     
     (define/private (missing-params)
-      '())   ; TODO
+      (filter (λ (k)
+               (and (param-required? (dict-ref params k))
+                    (not (dict-ref param-values k #f))))
+             (dict-keys params)))
 
 
-    (define/public (load [force-reload? #f])
+    (define/public (load! [force-reload? #f])
       (when (not connected?) (sinbad-error (format "not connected: ~a" path)))
-      (when (not (ready-to-load?)) (sinbad-error (format "not ready to load; missing params: ~a" (missing-params))))
+      (when (not (ready-to-load?))
+        (sinbad-error (format "not ready to load; missing params: ~a"
+                              (string-join (map symbol->string (missing-params)) ", "))))
 
       (define subtag "main")
       (define full-path (get-full-path-url))
@@ -173,15 +195,16 @@
                      (values (create-input resolved-path)
                              (lookup-entry-data cacher full-path "real-name")
                              (lookup-entry-data cacher full-path "enc"))]))
-            
-            (set! the-data (da-load-data data-factory
-                                         (cond [fp fp]
-                                               [else resolved-path])
-                                         enc))
-            (set! sampled? #f)
-            (set! loaded? #t)
-            (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until (load) is called again
-            )
+
+            (with-handlers ([exn:fail? (λ (e) (sinbad-error (format "failed to load data: ~a" (exn-message e))))])
+              (set! the-data (da-load-data data-factory
+                                           (cond [fp fp]
+                                                 [else resolved-path])
+                                           enc))
+              (set! sampled? #f)
+              (set! loaded? #t)
+              (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until (load) is called again
+              ))
 
           (lambda ()     ; finally:
             (when (unbox D) (stop-dot-printer (unbox D)))
@@ -269,8 +292,58 @@
       (with-handlers ([exn:fail? (λ (e) '())])
         (define data (if base-path (fetch base-path) (fetch)))
         (if (list? data) (length data) 0)))
+
+    
+
+    ;;; --- various options management methods ---------------------------------
+
+    (define/public (set-cache-timeout! value)
+      "Set the cache delay to the given value in seconds"
+
+      (set! cacher (update-timeout cacher (if (> value 0) (* 1000 value) value)))
+      this)
+
+    
+    (define/public (set-cache-directory! path)
+      "Set the cache directory for this data-source (only)"
+      (set! cacher (update-directory cacher path))
+      this)
+
+    (define/public (cache-directory)
+      (cacher-directory cacher))
+
+    (define/public (cache-timeout)     ; provides it in seconds
+      (let ([e (cacher-expiration cacher)])
+        (if (< 0 e)
+            (/ e 1000)
+            e)))
+    
+    (define/public (set-option! name value)
+      (match (string-downcase name)
+        ["file-entry"
+         (set! option-settings (hash-set option-settings 'file-entry value))]
+        [else
+         (da-set-option! data-factory name value)])
+      this)
+
+    (define/public (set-param! name value)
+      (set! param-values (hash-set param-values (if (string? name) (string->symbol name) name) value))
+      this)
+
+    (define/public (add-param! prm)
+      (set! params (hash-set params (string->symbol (param-key prm)) prm))
+      this)
+
     
     ))
+
+
+
+
+
+
+
+
 
 
 
@@ -305,7 +378,6 @@
            (values prefix
                    (map (λ(p) (substring p pos)) paths))))]))
 
-
 (module+ test
   (check-equal? (let-values ([(a b) (extract-common-prefix (list "a" "b" "c"))]) (list a b))
                 (list "" (list "a" "b" "c")))
@@ -321,7 +393,12 @@
 
 
 
-;; build-sig : proc? (listof <path-string>) [(listof <sig>)] -> <sig>
+
+
+
+
+
+;; build-sig : boolean proc? (listof <path-string>) [(listof <sig>)] -> <sig>
 (define (build-sig as-list? func base-path . field-paths)
   (define func-default? (and (symbol? func) (eq? func 'dict)))
   
@@ -346,8 +423,8 @@
         (wrap-if-list sig)
         `(path ,@base-path ,(wrap-if-list sig))))
 
+  (printf "build-sig (~a): ~a~n" base-path final-sig)
   final-sig)
-
 
 (module+ test
   (check-equal? (build-sig #t 'dict (list "features" "properties") "title")
@@ -361,24 +438,40 @@
                            (list seconds->date "time")
                            "mag")
                 `(path "features" "properties" ((,quake "title" (,seconds->date "time") "mag"))))
+  (check-equal? (build-sig #t 'dict '() (list (list string->number "features/properties/code")))
+                `((,string->number (path "features" "properties" "title"))))
   
   (check-equal? 2 (+ 1 1)))
 
 
 
 (define A
-  (send* (connect "http://services.faa.gov/airport/status/ATL?format=application/json")
-    (load)
+  (send* (connect #:format "json" "http://services.faa.gov/airport/status/ATL")
+    (set-param! "format" "application/json")
+    ;(get-full-path-url)))
+    (load!)
     (fetch-all)))
+
+
+(define Asub
+  (send* (connect #:format "json" "http://services.faa.gov/airport/status/@{airport-code}")
+    (add-param! (make-param "airport-code" 'path "3 letter airport code" #t))
+    (set-param! "format" "application/json")
+    (set-param! "airport-code" "JFK")
+    ;(get-full-path-url)))
+    (load!)
+    (fetch-all)))
+
+
 
 (define B
   (send* (connect "https://github.com/tamingtext/book/raw/master/apache-solr/example/exampledocs/books.json")
-    (load)
+    (load!)
     (fetch-all)))
 
 (define E
   (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
-    (load)
+    (load!)
     (fetch-all)))
 
 (require racket/date)
@@ -511,17 +604,22 @@ sig :=    (list <sig>)
 
 (define B2
   (send* (connect "https://github.com/tamingtext/book/raw/master/apache-solr/example/exampledocs/books.json")
-    (load)
+    (load!)
     (fetch #:select 0 #:apply book "name" "author" (list info "genre_s" "cat"))))
 
 (define E2
   (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
-    (load)
+    (load!)
     (fetch "properties/title" "geometry/coordinates" "properties/mag"
            #:apply quake #:base-path "features" #:select 0)))
 
 (define E3
   (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
-    (load)
+    (load!)
     (fetch "properties/title" "geometry/coordinates" "properties/mag" #:apply quake #:base-path "features" #:select '(1 -1))))
 
+#;
+(define E4
+  (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
+    (load!)
+    (fetch (list string->number "features/properties/code"))))

@@ -8,7 +8,8 @@
 (module+ test
   (require rackunit))
 
-(provide NEVER-CACHE
+(provide (struct-out cacher)
+         NEVER-CACHE
          NEVER-RELOAD
          sinbad-cache-enabled
          default-cacher
