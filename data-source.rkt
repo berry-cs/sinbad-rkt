@@ -39,7 +39,7 @@
    (for/first ([p *predefined-plugins*]
                #:when (or (and type-ext (string=? type-ext (dict-ref p 'type-ext)))
                           (and (not type-ext) (matched-by? (dict-ref p 'data-infer) path))))
-     (new data-source% (name path) (path path) (type-ext type-ext) (plugin p)))
+     (new data-source% (name path) (path path) (type-ext (dict-ref p 'type-ext)) (plugin p)))
    
    (error
     (if type-ext
@@ -293,6 +293,43 @@
         (define data (if base-path (fetch base-path) (fetch)))
         (if (list? data) (length data) 0)))
 
+
+    ;;; --- description  -------------------------------------------------------
+
+    (define/public (description)
+      (unless (has-data?) (sinbad-error "no data available - make sure you called (load)"))
+
+      (json-describe the-data))
+
+    (define/public (display-description)
+      (printf "-----~n")
+
+      (define url-path (if (ready-to-load?) (get-full-path-url) path))
+
+      (if (and name (not (string=? name path)))
+          (printf "Data Source: ~a\nURL: ~a~n" name url-path)
+          (printf "Data Source: ~a~n" url-path))
+
+      (when format-type
+        (printf "Format: ~a~n" format-type))
+
+      (when (or info-url info-text) (printf "~n"))
+      (when info-text (printf "~a~n" info-text))
+      (when info-url (printf "(See ~a for more information about this data.)~n" info-url))
+
+      (define param-keys (sort (dict-keys params) symbol-name<=?))
+      (unless (empty? param-keys)
+        (printf "~nThe following (connection) parameters may/must be set on this data source:~n")
+
+        ; TODO
+        
+          )
+
+      ; TODO ... options      
+
+      (if (has-data?)
+          (printf "~nThe following data is available:~n~a~n" (description))
+          (printf "~n*** Data not loaded *** ... use (load)~n~n")))
     
 
     ;;; --- various options management methods ---------------------------------
@@ -438,6 +475,7 @@
                            (list seconds->date "time")
                            "mag")
                 `(path "features" "properties" ((,quake "title" (,seconds->date "time") "mag"))))
+  #; ; TODO ....
   (check-equal? (build-sig #t 'dict '() (list (list string->number "features/properties/code")))
                 `((,string->number (path "features" "properties" "title"))))
   
@@ -601,6 +639,51 @@ sig :=    (list <sig>)
      result]))
 
 
+(define (json-describe thing [indent 0])
+  (define indent-amount 2)
+  (define (incr s) (+ s indent-amount))
+  
+  (define spaces (make-string indent #\space))
+
+  (cond
+    [(or (boolean? thing) (number? thing) (string? thing))
+     "*"]
+
+    [(list? thing)
+     (if (empty? thing)
+         "empty list"
+         (let ([elts (json-describe (first thing) (incr indent))])
+           (if (string-contains? elts "\n")
+               (string-append spaces "list of:\n" elts)
+               (string-append spaces "list of " (string-trim elts)))))]
+
+    [(dict? thing)
+     (define keys (sort (dict-keys thing) symbol-name<=?))
+     (define key-spaces (make-string (incr indent) #\space))
+
+     (define lines (for/list ([k keys])
+                     (define v (dict-ref thing k))
+                     (define leader (string-append key-spaces (symbol->string k) " : "))
+                     (define v-str (string-trim (json-describe v (string-length leader))))
+                     (string-append leader v-str "\n")))
+
+     (string-append spaces "structure with {\n"
+                    (string-join lines "")
+                    spaces "}")]
+
+    [else
+     "?"])
+
+  )
+
+(define symbol-name<=?
+  (lambda (s1 s2)
+    (string<=? (string-downcase (symbol->string s1))
+               (string-downcase (symbol->string s2)))))
+
+
+
+
 (struct book (title author info) #:transparent)
 (struct info (genre categories) #:transparent)
 
@@ -625,3 +708,13 @@ sig :=    (list <sig>)
   (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
     (load!)
     (fetch (list string->number "features/properties/code"))))
+
+
+(send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
+  (load!)
+  (display-description))
+
+(send* (connect #:format "json" "http://services.faa.gov/airport/status/ATL")
+    (set-param! "format" "application/json")
+    (load!)
+    (display-description))
