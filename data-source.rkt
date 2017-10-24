@@ -18,6 +18,12 @@
          connect)
 
 
+(define *debug* #f)
+
+(define-syntax dprintf
+  (syntax-rules ()
+    [(dprintf blah ...) (when *debug* (printf blah ...))]))
+
 
 
 (define *predefined-plugins*
@@ -58,12 +64,6 @@
   (syntax-rules ()
     [(sinbad-error msg) (raise (make-exn:fail:sinbad msg (current-continuation-marks)))]))
 
-
-(define *debug* #f)
-
-(define-syntax dprintf
-  (syntax-rules ()
-    [(dprintf blah ...) (when *debug* (printf blah ...))]))
 
 
 (define data-source%
@@ -423,7 +423,7 @@
         (wrap-if-list sig)
         `(path ,@base-path ,(wrap-if-list sig))))
 
-  (printf "build-sig (~a): ~a~n" base-path final-sig)
+  (dprintf "build-sig (~a): ~a~n" base-path final-sig)
   final-sig)
 
 (module+ test
@@ -510,7 +510,7 @@ sig :=    (list <sig>)
      |    <path-string>
 |#
 
-;; unify : jsexpr sig [integer? or #f or 'random or ...TODO]  -> (list any)
+;; unify : jsexpr sig [integer? or #f or 'random or (list integer? ...)]  -> (list any)
 (define (unify data sig [select #f] [as-list #f])
   (real-unify data sig select as-list))
 
@@ -584,7 +584,9 @@ sig :=    (list <sig>)
          [_
           (dprintf "wrapping list~n")
           (real-unify data s select #t)]))
-     (flatten result)]
+     (if (and (cons? s) (eq? (car s) list))   ; don't flatten explicit (list ...) constructor requests
+         result
+         (flatten result))]
 
     
     [(? string? p)

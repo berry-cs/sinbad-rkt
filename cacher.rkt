@@ -208,7 +208,7 @@
                                    ; or has expired...
                  (and e (expired? e (cacher-expiration c)))))
 
-        (printf "Refreshing cache for: ~a (~a)~n" path subtag)
+        (printf "Refreshing cache for: ~a (~a) ~a~n" path subtag (cacher-expiration c))
         
         (match-define
           (list new-cache-path local-name encoding)

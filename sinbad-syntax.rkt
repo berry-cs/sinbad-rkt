@@ -1,12 +1,10 @@
 #lang racket
 
+(provide sail-to)
+
+(require (for-syntax syntax/parse))
+
 (require "data-source.rkt")
-
-(provide sail-to )
-
-
-
-;(define-syntax param (lambda (stx) (raise-syntax-error #f "used out of context" stx)))
 
 
 ; stx:expr stx:(listof clauses) stx:expr -> (values stx:string stx:(list expr) stx:expr/#f stx:expr/#f)
@@ -19,35 +17,31 @@
 ; the given top-stx is for error reporting
 (define-for-syntax (process-clauses top-stx clauses o)
   (let-values ([(fmt e-lst l-exp s-exp)
-                (syntax-case clauses ()
+                (syntax-parse clauses
                   [(c cs ...) (process-clauses top-stx #'(cs ...) o)]
-                  [_ (values #f #'() #f #f)])]
-               [(first-clause)
-                (syntax-case clauses ()
-                  [(c cs ...) #'c]
-                  [_ #f])])
+                  [_ (values #f #'() #f #f)])])
     
-    (syntax-case clauses (param option cache-timeout load sample format)
-      [((cache-timeout t) cs ...)
+    (syntax-parse clauses
+      [(((~datum cache-timeout) t) cs ...)
        (values fmt #`((send #,o set-cache-timeout! t) #,@e-lst) l-exp s-exp)]
 
-      [((param n v) cs ...)
+      [(((~datum param) n v) cs ...)
        (values fmt #`((send #,o set-param! n v) #,@e-lst) l-exp s-exp)]
 
-      [((option n v) cs ...)
+      [(((~datum option) n v) cs ...)
        (values fmt #`((send #,o set-option! n v) #,@e-lst) l-exp s-exp)]
 
-      [((load) cs ...)
+      [(((~datum load) (~optional force? #:defaults ([force? #'#f]))) cs ...)
        (cond [l-exp (raise-syntax-error #f "cannot have multiple (load) clauses" top-stx)]
              [s-exp (raise-syntax-error #f "cannot have both (load) and (sample) clauses" top-stx)]
-             [else (values fmt e-lst   #`(send #,o load!)   s-exp)])]
+             [else   (values fmt e-lst   #`(send #,o load! force?)   s-exp)])]
 
-      [((sample n) cs ...)
+      [(((~datum sample) n) cs ...)
        (cond [l-exp (raise-syntax-error #f "cannot have both (load) and (sample) clauses" top-stx)]
              [s-exp (raise-syntax-error #f "cannot have multiple (sample) clauses" top-stx)]
              [else (values fmt e-lst   l-exp   #`(send #,o sample! n))])]
 
-      [((format fmt) cs ...) (values #`fmt e-lst l-exp s-exp)]
+      [(((~datum format) fmt) cs ...) (values #`fmt e-lst l-exp s-exp)]
     
       [(c cs ...) (raise-syntax-error #f "invalid clause" #'c)]
       
@@ -55,8 +49,8 @@
 
 
 (define-syntax (sail-to stx)
-  (syntax-case stx ()
-    [(_ url clauses ...)
+  (syntax-parse stx
+    [(sail-to url clauses ...)
 
        (let-values ([(fmt e-lst l-exp s-exp) (process-clauses stx #'(clauses ...) #'o)])
          (let ([connect-expr (if fmt
@@ -69,29 +63,18 @@
                o)))]))
 
 
-
 #|
 
 
-(define airport "ATL")
-
 (define A
-  (sail-to (string-append "http://services.faa.gov/airport/status/" airport)
-           (param "format" "application/json")
+  (sail-to "http://services.faa.gov/airport/status/ATL"
            (format "json")
-           (load)
+           (param "format" "application/json")
            (option "file-entry" "...")
-           (cache-timeout 300)))
+           (cache-timeout 300)
+           (load)
+           ))
+A
 
-
-
-
-
-; stx:(listof clauses) -> stx:string or #f
-(define-for-syntax (extract-fmt clauses)
-  (syntax-case clauses (format)
-    [((format fmt) cs ...) #`fmt]
-    [(c cs ...) (extract-fmt #'(cs ...))]
-    [_ #f]))
 
 |#
