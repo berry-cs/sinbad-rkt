@@ -223,33 +223,161 @@ based on whether the path name contains .csv or .tsv).
 
 
 
-#|
 
-(require sxml/ssax/SSAX-code)
-(require srfi/13/string)
 
-((ssax:make-parser
-   NEW-LEVEL-SEED 
-   (lambda (elem-gi attributes namespaces
-                    expected-content seed)
-     '())
-   FINISH-ELEMENT
-   (lambda (elem-gi attributes namespaces parent-seed seed)
-      (let ((seed (ssax:reverse-collect-str-drop-ws seed)))
-        (cons
-         (list 
-          (if (symbol? elem-gi) elem-gi
-              (RES-NAME->SXML elem-gi))
-          attributes
-          seed)
-         parent-seed)))
+(require  sxml/ssax/SSAX-code)
+(require (only-in srfi/13/string string-null?)
+         (only-in srfi/1 cons*))
 
-   CHAR-DATA-HANDLER
-   (lambda (string1 string2 seed)
-     (if (string-null? string2) (cons string1 seed)
-         (cons* string2 string1 seed)))
-   )
-   (open-input-string
-    "<zippy><pippy pigtails=\"2\">ab duh\n</pippy>cd</zippy>")
-   '())
-|#
+(define res-name->sxml
+  (lambda (res-name)
+    (string->symbol
+     (string-append
+      (symbol->string (car res-name))
+      ":"
+      (symbol->string (cdr res-name))))))
+
+
+(define (ssax:xml->jsexpr port)
+  (let ([result
+          ((ssax:make-parser
+            
+            NEW-LEVEL-SEED 
+            (lambda (elem-gi attributes namespaces expected-content seed)
+              ;(printf "new-level ~a ~a ~a ~a ~a~n" elem-gi attributes namespaces expected-content seed)
+              #f)
+            
+   
+            FINISH-ELEMENT
+            (lambda (elem-gi attributes namespaces prior-seed content-seed)
+              (define tag (if (symbol? elem-gi) elem-gi (res-name->sxml elem-gi)))
+              ;(printf "finish: ~a ~a ~a ~a ~a~n" tag attributes namespaces prior-seed content-seed)
+
+              (let ([content-seed
+                     (for/fold ([result content-seed])
+                               ([(k v) (in-dict attributes)])
+                       (dict-extend/listify
+                        result
+                        (string->symbol (string-append "@" (symbol->string k)))
+                        v))])
+                (cond
+                  [(empty? prior-seed)   ; root element
+                   content-seed]
+
+                  [(void? prior-seed)    ; empty element - content should be #f
+                   (hasheq tag "")]
+                
+                  [(false? prior-seed)   ; element with no significant content, or what? ... not sure
+                   (hasheq tag content-seed)]
+                
+                  [(dict? prior-seed)
+                   (dict-extend/listify prior-seed tag content-seed)]
+                
+                  [(string? prior-seed)
+                   (hasheq '*content* prior-seed
+                           tag content-seed)]
+                
+                  [else (error "bad")]))
+
+              
+              )
+              
+
+            CHAR-DATA-HANDLER
+            (lambda (string1 string2 seed)
+              (define str (string-trim (string-append string1 string2)))
+              ;(printf "char handler: ~a ~a~n" str seed)
+
+              (cond
+                [(string=? str "") seed]
+                [(false? seed) str]
+                [(dict? seed)  (dict-extend/listify seed '*content* str)]))
+
+            ;; not really used...
+            DOCTYPE
+	     (lambda (port docname systemid internal-subset? seed)
+	       (values #f '() '() seed))
+
+	     UNDECL-ROOT
+	     (lambda (elem-gi seed)
+	       (values #f '() '() seed))
+
+             PI
+             ((*DEFAULT* .
+                         (lambda (port pi-tag seed)
+                           (define body (ssax:read-pi-body-as-string port))
+                           ; (printf "PI: ~a ~a ~a~n" pi-tag body seed)
+                           seed)))
+             )
+           port '())])
+    result))
+
+
+(define (dict-extend/listify dict key value)
+  (cond
+    [(string? dict) (dict-extend/listify (hasheq '*content* dict) key value)]
+    [(not (dict-has-key? dict key))
+     (dict-set dict key value)]
+    [(list? (dict-ref dict key))
+     (define val-list (dict-ref dict key))
+     (dict-set dict key (append val-list (list value)))]
+    [else
+     (define existing-val (dict-ref dict key))
+     (dict-set dict key (list existing-val value))]))
+
+(define (xtest str)
+  (printf "------- Testing: ~a~n" str)
+  (ssax:xml->jsexpr (open-input-string str)))
+
+(xtest "<zippy><pippy pigtails=\"2\">ab duh</pippy>cd hi <no /></zippy>")
+
+
+(module+ test
+  (require rackunit)
+
+  )
+
+(module+ test
+  
+  (check-equal? (xtest "<root>hello</root>") "hello")
+  (check-equal? (xtest "<root>hello<car>Ford</car></root>") (hasheq '*content* "hello"
+                                                                    'car "Ford"))
+  (check-equal? (xtest "<root><car>Ford</car>hello</root>") (hasheq '*content* "hello"
+                                                                    'car "Ford"))
+  (check-equal? (xtest "<root><car><make>Ford</make><model>Taurus</model></car>
+                         <car><make>Honda</make><model>Odyssey</model></car></root>")
+                (hasheq 'car (list (hasheq 'make "Ford" 'model "Taurus")
+                                                 (hasheq 'make "Honda" 'model "Odyssey"))))
+  (check-equal? (xtest "<root><car year=\"1998\"><make>Ford</make><model>Taurus</model></car>
+                         <car year=\"2005\"><make>Honda</make><model>Odyssey</model></car></root>")
+                (hasheq 'car (list (hasheq 'make "Ford" 'model "Taurus" '@year "1998")
+                                                 (hasheq 'make "Honda" 'model "Odyssey" '@year "2005"))))
+  
+  (check-equal? (dict-extend/listify (hasheq ) 'hi "new") (hasheq 'hi "new"))
+  (check-equal? (dict-extend/listify (hasheq 'bye "old") 'hi "new") (hasheq 'bye "old" 'hi "new"))
+  (check-equal? (dict-extend/listify (hasheq 'hi "new") 'hi "old") (hasheq 'hi (list "new" "old")))
+  (check-equal? (dict-extend/listify (hasheq 'bye "old" 'hi (list "new" "old")) 'hi "good")
+                (hasheq 'bye "old" 'hi (list "new" "old" "good"))))
+
+
+(define-struct xml-infer ()
+  #:methods gen:data-infer
+  [(define (matched-by? inf path)
+     (let ([path (string-downcase path)])
+       (or (string-suffix? path "xml")
+           (for/or ([ptrn `(".xml" "=xml" "/xml")])
+             (string-contains? path ptrn)))))
+   (define (infer-options inf)
+     '())])
+
+(define-struct xml-access ()
+  #:methods gen:data-access
+  [(define (da-options da) '())
+   (define (da-get-option da k) #f)
+   (define (da-set-option! da k v) (void))
+   (define (da-load-data da fp [enc #f])
+     (if enc
+         (parameterize ([current-locale enc])
+           (ssax:xml->jsexpr fp))
+         (ssax:xml->jsexpr fp)))])
+

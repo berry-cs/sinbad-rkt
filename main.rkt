@@ -6,6 +6,7 @@
 (provide (all-from-out "sinbad-syntax.rkt"))
 
 (provide load
+         manifest
          fetch
          fetch-ith
          fetch-first
@@ -27,6 +28,10 @@
     [(load obj:expr) #'(send obj load!)]
     [(load obj:expr force?:boolean) #'(send obj load! force?)]))
 
+
+(define-syntax (manifest stx)
+  (syntax-parse stx
+    [(manifest obj:expr) #'(send obj display-description)]))
 
 
 (define-syntax (fetch stx)

@@ -28,7 +28,9 @@
 
 (define *predefined-plugins*
   (list (hasheq 'name "JSON (built-in)" 'type-ext "json" 
-                'data-infer (json-infer) 'data-factory json-access)))
+                'data-infer (json-infer) 'data-factory json-access)
+        (hasheq 'name "XML (ssax built-in)" 'type-ext "xml"
+                'data-infer (xml-infer) 'data-factory xml-access)))
 
 
 (define (connect path #:format [data-format #f])
@@ -175,41 +177,44 @@
          
          (define D (box #f))
          (define-values (fp zfp) (values #f #f))
+         (define the-cust (make-custodian))
          
          (dynamic-wind
           (lambda ()
             (set-box! D (dot-printer (format "Loading data (this may take a moment)"))))
    
           (lambda ()    ; try:
-            (define resolved-path (resolve-cache-path cacher full-path subtag))
+            (parameterize ([current-custodian the-cust])
+              (define resolved-path (resolve-cache-path cacher full-path subtag))
 
-            (define-values
-              (fp local-name enc)
-              (cond [(string=? resolved-path full-path)   ; wasn't cached - loading it directly
-                     (match-define (list fp nm en) (raw-create-input resolved-path))
-                     (define byts (port->bytes fp))
-                     (close-input-port fp)
-                     (values (open-input-bytes byts) nm en)]
+              (define-values
+                (fp local-name enc)
+                (cond [(string=? resolved-path full-path)   ; wasn't cached - loading it directly
+                       (match-define (list fp nm en) (raw-create-input resolved-path))
+                       (define byts (port->bytes fp))
+                       (close-input-port fp)
+                       (values (open-input-bytes byts) nm en)]
                     
-                    [else
-                     (values (create-input resolved-path)
-                             (lookup-entry-data cacher full-path "real-name")
-                             (lookup-entry-data cacher full-path "enc"))]))
+                      [else
+                       (values (create-input resolved-path)
+                               (lookup-entry-data cacher full-path "real-name")
+                               (lookup-entry-data cacher full-path "enc"))]))
 
-            (with-handlers ([exn:fail? (λ (e) (sinbad-error (format "failed to load data: ~a" (exn-message e))))])
-              (set! the-data (da-load-data data-factory
-                                           (cond [fp fp]
-                                                 [else resolved-path])
-                                           enc))
-              (set! sampled? #f)
-              (set! loaded? #t)
-              (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until (load) is called again
-              ))
+              (with-handlers ([exn:fail? (λ (e) (sinbad-error (format "failed to load data: ~a" (exn-message e))))])
+                (set! the-data (da-load-data data-factory
+                                             (cond [fp fp]
+                                                   [else resolved-path])
+                                             enc))
+                (set! sampled? #f)
+                (set! loaded? #t)
+                (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until (load) is called again
+                )))
 
           (lambda ()     ; finally:
             (when (unbox D) (stop-dot-printer (unbox D)))
             (when fp (close-input-port fp))
             (when zfp (close-input-port zfp))
+            (custodian-shutdown-all the-cust)
             ;; TODO: share  load   usage
             ))
          

@@ -23,19 +23,19 @@
                   [_ (values #f #'() #f #f #f)])])
     
     (syntax-parse clauses
-      [(((~datum cache-timeout) t) cs ...)
+      [(((~datum cache-timeout) t:expr) cs ...)
        (values fmt #`((send #,o set-cache-timeout! t) #,@e-lst) l-exp s-exp d-exp)]
 
-      [(((~datum param) n v) cs ...)
+      [(((~datum param) n:str v:expr) cs ...)
        (values fmt #`((send #,o set-param! n v) #,@e-lst) l-exp s-exp d-exp)]
 
-      [(((~datum option) n v) cs ...)
+      [(((~datum option) n:str v:expr) cs ...)
        (values fmt #`((send #,o set-option! n v) #,@e-lst) l-exp s-exp d-exp)]
 
-      [(((~datum describe)) cs ...)
+      [(((~datum manifest)) cs ...)
        (values fmt e-lst l-exp s-exp #`(send #,o display-description))]
 
-      [(((~datum load) (~optional force? #:defaults ([force? #'#f]))) cs ...)
+      [(((~datum load) (~optional force?:boolean #:defaults ([force? #'#f]))) cs ...)
        (cond [l-exp (raise-syntax-error #f "cannot have multiple (load) clauses" top-stx)]
              [s-exp (raise-syntax-error #f "cannot have both (load) and (sample) clauses" top-stx)]
              [else   (values fmt e-lst   #`(send #,o load! force?)   s-exp d-exp)])]
@@ -45,7 +45,7 @@
              [s-exp (raise-syntax-error #f "cannot have multiple (sample) clauses" top-stx)]
              [else (values fmt e-lst   l-exp   #`(send #,o sample! n)   d-exp)])]
 
-      [(((~datum format) fmt) cs ...) (values #`fmt e-lst l-exp s-exp d-exp)]
+      [(((~datum format) fmt:str) cs ...) (values #`fmt e-lst l-exp s-exp d-exp)]
     
       [(c cs ...) (raise-syntax-error #f "invalid clause" #'c)]
       
