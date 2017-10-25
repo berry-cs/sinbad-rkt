@@ -99,7 +99,7 @@
   (syntax-parse stx
     [(fetch-float obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str)
      #`(let ([result (send obj fetch #:select pos path)]
-             [->number (lambda (s) (if (string? s) (string->number s) s))])
+             [->number (lambda (s) (if (string? s) (or (string->number (string-trim s)) 0) 0))])
          (if (list? result) (map ->number result) (->number result)))]))
 
 (define-syntax (fetch-first-number stx)

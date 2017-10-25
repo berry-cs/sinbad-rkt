@@ -28,7 +28,7 @@ instantiated (for example, the CSV plugin may infer a delimiter
 based on whether the path name contains .csv or .tsv).
 
 <DataAccess> objects should support methods:        
-(1) da-options : data-access -> list
+(1) da-options : data-access -> list[string]
     produces a list of value option names for the data format
 (2) da-get-option : data-access string -> value
     produces the value (or None) of the option with the given name
@@ -73,10 +73,8 @@ based on whether the path name contains .csv or .tsv).
    (define (da-get-option da k) #f)
    (define (da-set-option! da k v) (void))
    (define (da-load-data da fp [enc #f])
-     (if enc
-         (parameterize ([current-locale enc])
-           (read-json fp))
-         (read-json fp)))])
+     (parameterize ([current-locale (if enc enc (current-locale))])
+       (read-json fp)))])
 
 
 
@@ -156,7 +154,7 @@ based on whether the path name contains .csv or .tsv).
       (skip-whitespace)
       (unless (regexp-try-match #rx#"^:" i)
         (err "error while parsing a json object pair"))
-      (list (string->symbol k) (read-json)))
+      (list (string->symbol (replace-slash+trim k)) (read-json)))     ; .nah. fix key names to not have /
     (apply hasheq (apply append (read-list 'object #rx#"^}" read-pair))))
   ;;
   (define (read-json [top? #f])
@@ -392,8 +390,136 @@ based on whether the path name contains .csv or .tsv).
    (define (da-get-option da k) #f)
    (define (da-set-option! da k v) (void))
    (define (da-load-data da fp [enc #f])
-     (if enc
-         (parameterize ([current-locale enc])
-           (ssax:xml->jsexpr fp))
-         (ssax:xml->jsexpr fp)))])
+     (parameterize ([current-locale (if enc enc (current-locale))])
+       (ssax:xml->jsexpr fp)))])
+
+
+;; ------  CSV ------------------------------------------
+;; ------  CSV ------------------------------------------
+;; ------  CSV ------------------------------------------
+;; ------  CSV ------------------------------------------
+
+
+
+(require csv-reading)
+
+(define HEADER-OPT     "header"    )
+(define SKIP-ROWS-OPT  "skip-rows" )
+(define DELIMITER-OPT  "delimiter" )
+
+(define (make-csv-infer [delim #f])
+  (csv-infer delim))
+
+(struct csv-infer (delim)
+  #:transparent #:mutable
+  #:methods gen:data-infer
+  [
+   (define (matched-by? inf path)
+     (let ([path (string-downcase path)])
+       (define matches-csv (or (string-suffix? path "csv")
+                               (for/or ([ptrn `(".csv" "=csv" "/csv")])
+                                 (string-contains? path ptrn))))
+       (define matches-tsv (or (string-suffix? path "tsv")
+                               (for/or ([ptrn `(".tsv" "=tsv" "/tsv")])
+                                 (string-contains? path ptrn))))
+
+       (when matches-tsv
+         (set-csv-infer-delim! inf #\tab))
+
+       (or matches-csv matches-tsv)))
+   
+   (define (infer-options inf)
+     (define delim (csv-infer-delim inf))
+     (if delim
+         (hasheq DELIMITER-OPT delim)
+         '()))])
+
+(struct csv-access ([field-names #:auto] [delimiter #:auto] [skip-rows #:auto])
+  #:transparent #:mutable
+  #:methods gen:data-access
+  [(define (da-options da) (list HEADER-OPT SKIP-ROWS-OPT DELIMITER-OPT))
+   
+   (define (da-get-option da k)
+     (cond
+       [(string=? k HEADER-OPT)
+        (if (csv-access-field-names da)
+            (string-join (csv-access-field-names da) ",")
+            #f)]
+       [(string=? k DELIMITER-OPT)
+        (csv-access-delimiter da)]
+       [(string=? k SKIP-ROWS-OPT)
+        (or (csv-access-skip-rows da) 0)]       
+       [else #f]))
+   
+   (define (da-set-option! da k v)
+     (cond
+       [(string=? k HEADER-OPT)
+        (cond [(string? v) (set-csv-access-field-names! da (map string-trim (string-split v ",")))]
+              [(and (list? v) (andmap string? v)) (set-csv-access-field-names! da v)]
+              [else (raise-arguments-error 'set-option "header value must be provided as a comma-separated string or a list of strings")])]
+       [(string=? k DELIMITER-OPT)
+        (cond [(char? v) (set-csv-access-delimiter! da v)]
+              [(and (string? v) (= 1 (string-length v))) (set-csv-access-delimiter! da (string-ref v 0))]
+              [else (raise-arguments-error 'set-option "delimiter value must be a single character")])]
+       [(string=? k SKIP-ROWS-OPT)
+        (cond [(nonnegative-integer? v) (set-csv-access-skip-rows! da v)]
+              [(and (string? v) (string->number v)) (set-csv-access-skip-rows! da (string->number v))]
+              [else (raise-arguments-error 'set-option "skip-rows value must be a non-negative integer")])]       
+       [else (void)]))
+   
+   (define (da-load-data da fp [enc #f])
+         (parameterize ([current-locale (if enc enc (current-locale))])
+           (csv->jsexpr da fp)))])
+
+
+(define (csv->jsexpr csv-acc fp)
+  (define field-syms (and (csv-access-field-names csv-acc)
+                          (fix-headers (csv-access-field-names csv-acc))))
+  (define skip-rows (or (csv-access-skip-rows csv-acc) 0))
+
+  (define sep-char (if (csv-access-delimiter csv-acc)
+                       (list (csv-access-delimiter csv-acc))
+                       (list #\,)))
+  (define reader (make-csv-reader fp `((separator-chars . ,sep-char))))
+  (define raw-rows (drop (csv->list reader) skip-rows))
+
+  (define headers
+    (or field-syms (fix-headers (first raw-rows))))
+  (define rows (if field-syms raw-rows (rest raw-rows)))
+
+  ;(display headers)(newline)
+
+  ;(hasheq 'data
+          (for/list ([row rows])
+            (for/hasheq ([cell row]
+                         [key  headers])
+              (define as-num (string->number cell))
+              (values key (or as-num (string->boolean/try cell))))))
+
+
+(define (replace-slash+trim s)
+  (string-replace (string-trim s) "/" "-"))
+
+
+;; listof-string -> listof-symbol
+(define (fix-headers los)
+  (for/list ([s los]
+             [i (in-naturals)])
+    (define s2 (replace-slash+trim s))
+    (define s3 (if (string=? "" s2)
+                   (format "col-~a" i)
+                   s2))
+    (string->symbol s3)))
+
+
+;; string -> boolean or string
+(define (string->boolean/try s)
+  (cond
+    [(not (string? s)) s]
+    [(member (string-downcase s) '("true" "yes"))]
+    [(member (string-downcase s) '("false" "no"))]
+    [else s]))
+
+
+
 

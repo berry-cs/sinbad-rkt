@@ -209,7 +209,7 @@
                                    ; or has expired...
                  (and e (expired? e (cacher-expiration c)))))
 
-        (printf "Refreshing cache for: ~a (~a) ~a~n" path subtag (cacher-expiration c))
+        ;(printf "Refreshing cache for: ~a (~a) ~a~n" path subtag (cacher-expiration c))
         
         (match-define
           (list new-cache-path local-name encoding)
@@ -224,12 +224,12 @@
         ; if local-name or enc were detected by raw_create_input via the read_and_cache function
         ; then cache those as well
         (when local-name
-          (printf "adding real-name ~a for ~a~n" local-name path)
+          ;(printf "adding real-name ~a for ~a~n" local-name path)
           (add-or-update-entry
            c (entry path "real-name" local-name (current-milliseconds))))
 
         (when encoding
-          (printf "adding encoding ~a for ~a~n" encoding path)
+          ;(printf "adding encoding ~a for ~a~n" encoding path)
           (add-or-update-entry
            c (entry path "encoding" encoding (current-milliseconds))))
 
@@ -240,8 +240,7 @@
         #f]
 
        [else
-        (when cache-path
-          (printf "Using previously cached data for: ~a (~a): ~a~n" path subtag cache-path))
+        ;(when cache-path (printf "Using previously cached data for: ~a (~a): ~a~n" path subtag cache-path))
         cache-path]))))
 
 
@@ -267,7 +266,7 @@
      (define e (cache-entry-for c path subtag))
      (define cache-path (and e (entry-data e)))
 
-     (printf "Refreshing cache for: ~a (~a)~n" path subtag)
+     ;(printf "Refreshing cache for: ~a (~a)~n" path subtag)
 
      (match-define
        (list new-cache-path _ _)

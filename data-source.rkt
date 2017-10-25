@@ -35,7 +35,9 @@
   (list (hasheq 'name "JSON (built-in)" 'type-ext "json" 
                 'data-infer (json-infer) 'data-factory json-access)
         (hasheq 'name "XML (ssax built-in)" 'type-ext "xml"
-                'data-infer (xml-infer) 'data-factory xml-access)))
+                'data-infer (xml-infer) 'data-factory xml-access)
+        (hasheq 'name "CSV (built-in)" 'type-ext "csv"
+                'data-infer (csv-infer #f) 'data-factory csv-access)))
 
 
 (define (connect path #:format [data-format #f])
@@ -231,7 +233,7 @@
              (and local-name (smells-like-zip? local-name)))
          (define zdir (read-zip-directory fp))
          (define members (map bytes->string/locale (zip-directory-entries zdir)))
-         (printf "Zip members: ~a~n" members)
+         ;(printf "Zip members: ~a~n" members)
 
          (when (and (not (hash-has-key? option-settings 'file-entry))
                     (= 1 (length members)))
@@ -239,7 +241,7 @@
 
          (define fe-value (hash-ref option-settings 'file-entry #f))
          (define fe-subtag (format "file-entry:~a" fe-value))
-         (printf "fe-value: ~a~n" fe-value)
+         ;(printf "fe-value: ~a~n" fe-value)
          
          (cond
            [(and fe-value (zip-directory-contains? zdir fe-value))
@@ -619,7 +621,7 @@
 
 
 (define (apply-select ds select)
-  (if (not (list? ds))
+  (if (or (not select) (not (list? ds)))
       ds
       (match select
         [(? nonnegative-integer? i)  (list-ref ds i)]
