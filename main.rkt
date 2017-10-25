@@ -7,6 +7,8 @@
 
 (provide load
          manifest
+         field-list
+         data-length
          fetch
          fetch-ith
          fetch-first
@@ -32,6 +34,22 @@
 (define-syntax (manifest stx)
   (syntax-parse stx
     [(manifest obj:expr) #'(send obj display-description)]))
+
+
+(define-syntax (field-list stx)
+  (syntax-parse stx
+    [(field-list obj:expr (~optional base-path #:defaults ([base-path #'#f])))
+     #`(let ([data (let unwrap ([d (send obj fetch #:base-path base-path)])
+                             (if (cons? d) (unwrap (first d)) d))])
+         (if (dict? data) (map symbol->string (dict-keys data)) '()))]))
+
+
+(define-syntax (data-length stx)
+  (syntax-parse stx
+    [(data-length obj:expr (~optional base-path #:defaults ([base-path #'#f])))
+     #`(let ([data (send obj fetch #:base-path base-path)])
+         (if (list? data) (length data) 0))]))
+
 
 
 (define-syntax (fetch stx)
