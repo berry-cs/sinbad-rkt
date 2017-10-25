@@ -240,7 +240,8 @@
         #f]
 
        [else
-        (printf "Using previously cached data for: ~a (~a)~n" path subtag)
+        (when cache-path
+          (printf "Using previously cached data for: ~a (~a): ~a~n" path subtag cache-path))
         cache-path]))))
 
 

@@ -1,6 +1,7 @@
 #lang racket
 
 (provide sail-to)
+(provide (all-from-out "data-source.rkt"))
 
 (require (for-syntax syntax/parse))
 
@@ -40,10 +41,15 @@
              [s-exp (raise-syntax-error #f "cannot have both (load) and (sample) clauses" top-stx)]
              [else   (values fmt e-lst   #`(send #,o load! force?)   s-exp d-exp)])]
 
-      [(((~datum sample) n) cs ...)
+      [(((~datum sample) n (~optional seed #:defaults ([seed #'#f]))) cs ...)
        (cond [l-exp (raise-syntax-error #f "cannot have both (load) and (sample) clauses" top-stx)]
              [s-exp (raise-syntax-error #f "cannot have multiple (sample) clauses" top-stx)]
-             [else (values fmt e-lst   l-exp   #`(send #,o sample! n)   d-exp)])]
+             [else (values fmt e-lst   l-exp   #`(send #,o load-sample! n seed)   d-exp)])]
+
+      [(((~datum fresh-sample) n (~optional seed #:defaults ([seed #'#f]))) cs ...)
+       (cond [l-exp (raise-syntax-error #f "cannot have both (load) and (sample) clauses" top-stx)]
+             [s-exp (raise-syntax-error #f "cannot have multiple (sample) clauses" top-stx)]
+             [else (values fmt e-lst   l-exp   #`(send #,o load-fresh-sample! n seed)   d-exp)])]
 
       [(((~datum format) fmt:str) cs ...) (values #`fmt e-lst l-exp s-exp d-exp)]
     

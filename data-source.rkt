@@ -3,7 +3,8 @@
 
 (require net/uri-codec
          file/unzip
-         racket/random)
+         racket/random
+         (only-in json jsexpr->bytes))
 (require "cacher.rkt"
          "dot-printer.rkt"
          "plugin.rkt"
@@ -16,7 +17,9 @@
 
 (provide data-source%
          (struct-out exn:fail:sinbad)
-         connect)
+         connect
+         NEVER-CACHE
+         NEVER-RELOAD)
 
 
 (define *debug* #f)
@@ -177,7 +180,6 @@
          ; TODO - prep usage info to share ....
          
          (define D (box #f))
-         (define fp #f)
          (define the-cust (make-custodian))
          
          (dynamic-wind
@@ -215,7 +217,6 @@
 
           (lambda ()     ; finally:
             (when (unbox D) (stop-dot-printer (unbox D)))
-            (when fp (close-input-port fp))
             (custodian-shutdown-all the-cust)
             ;; TODO: share  load   usage
             ))
@@ -260,6 +261,92 @@
         [else fp]))
     
 
+
+    (define/public (load-sample! [max-elts 25] [random-seed #f] [force-reload? #f])
+#|
+        Load and then sample from all available data. See sample_data().
+        The sampled data is cached. To reload the entire data and
+        resample it, rather than using a previously-cached sample,
+        use force_reload=True.
+        #
+        # look for cache subtag:   "sample:<max-elts>" in the cache
+        # if  not there, or if stale, or if force_reload is True:
+        #     load()
+        #     sample the loaded data
+        #     cache the sample (serialized as json)
+        #     return the sample
+        # otherwise
+        #     load the cached sample (unserialize as json)
+        #     return it
+        #
+|#
+      (unless connected? (sinbad-error (format "not connected: ~a" path)))
+      (unless (ready-to-load?)
+        (sinbad-error (format "not ready to load; missing params: ~a"
+                              (string-join (map symbol->string (missing-params)) ", "))))
+
+      (define full-path (get-full-path-url))
+      (define fe-value (hash-ref option-settings 'file-entry #f))
+      (define subtag
+        (if fe-value
+            (format "sample:~a-~a_~a" fe-value max-elts (or random-seed "x"))
+            (format "sample:~a_~a" max-elts (or random-seed "x"))))
+
+      (define D (box #f))
+      (define the-cust (make-custodian))
+
+      (dynamic-wind
+       (lambda ()
+         (set-box! D (dot-printer (format "Sampling data (this may take a moment)"))))
+   
+       (lambda ()    ; try:
+         (parameterize ([current-custodian the-cust])
+      
+           (define entry-cached-path (resolve-cache-path cacher full-path subtag))
+
+           (cond
+             [(and entry-cached-path (not force-reload?))   ; seems to be cached
+              (define fp (create-input entry-cached-path))
+              (set! the-data (da-load-data (json-access) fp))  ; specifically JSON format
+
+              (set! sampled? #t)
+              (set! loaded? #t)   ; duplicate these two lines because (load!) didn't get called on this path of execution
+              (set! random-index #f)  ; so that (fetch-random) actually returns the same position, until (load) is called again
+              ]
+
+             [else
+              (load! force-reload?)
+              (when loaded?
+                ;(printf "the-data: ~a~n" (substring (format "~a" the-data) 0 (min 1000 (string-length (format "~a" the-data)))))
+                (define sampled-data (sample-data the-data max-elts random-seed))
+                ;(printf "sampled-data: ~a~n" (substring (format "~a" sampled-data) 0 (min 1000 (string-length (format "~a" sampled-data)))))
+                (define fp (open-input-bytes (jsexpr->bytes sampled-data)))
+                (add-to-cache cacher full-path subtag fp)
+                (set! the-data sampled-data)
+                (set! sampled? #t)
+                
+                ;; TODO: share  sample   usage
+                )
+              ])
+      
+           ))
+
+         (lambda ()     ; finally:
+           (when (unbox D) (stop-dot-printer (unbox D)))
+           (custodian-shutdown-all the-cust)
+           ))
+       
+      this)
+
+    
+
+    (define/public (load-fresh-sample! [max-elts 25] [random-seed #f])
+      (load-sample! max-elts random-seed #t))
+
+
+
+
+    
     
     (define/public (fetch-all)
       (unless (has-data?) (sinbad-error "no data available - make sure you called (load)"))

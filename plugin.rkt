@@ -211,7 +211,9 @@ based on whether the path name contains .csv or .tsv).
 
   (cond
     [(dict? obj)
-     (dict-map obj (lambda (k v) (sample-data v max-elts)))]
+     (for/hasheq ([(k v) (in-dict obj)])
+       (values k (sample-data v max-elts)))]
+     ;(dict-map obj (lambda (k v) (sample-data v max-elts)))]
     [(list? obj)
      (define top-sample (if (<= (length obj) max-elts)
                             obj
@@ -284,13 +286,16 @@ based on whether the path name contains .csv or .tsv).
 
             CHAR-DATA-HANDLER
             (lambda (string1 string2 seed)
-              (define str (string-trim (string-append string1 string2)))
-              ;(printf "char handler: ~a ~a~n" str seed)
+              ;(printf "char handler: ~s ~s [~s]~n" string1 string2 seed)
+              
+              (define str (string-append string1 string2))
 
               (cond
-                [(string=? str "") seed]
+                [(and (string=? (string-trim str) "")
+                      (or (false? seed) (dict? seed))) seed]
                 [(false? seed) str]
-                [(dict? seed)  (dict-extend/listify seed '*content* str)]))
+                [(string? seed) (string-append seed str)]
+                [(dict? seed)  (dict-extend/listify seed '*content* (string-trim str))]))
 
             ;; not really used...
             DOCTYPE
@@ -325,19 +330,21 @@ based on whether the path name contains .csv or .tsv).
      (hash-set! dict key (list existing-val value))])
   dict)
 
-(define (xtest str)
-  (printf "------- Testing: ~a~n" str)
-  (define (h->l x)
+(define (h->l x)
     (if (hash? x)
         (for/list ([(k v) (in-dict x)])
           (if (list? v)
               (cons k (map h->l v))
               (cons k (h->l v))))
         x))
+
+(define (xtest str)
+  ;(printf "------- Testing: ~a~n" str)
+  
   (let ([result (ssax:xml->jsexpr (open-input-string str))])
     (h->l result)))
 
-(xtest "<zippy><pippy pigtails=\"2\">ab duh</pippy>cd hi <no /></zippy>")
+;(xtest "<zippy><pippy pigtails=\"2\">ab duh</pippy>cd hi <no /></zippy>")
 
 
 (module+ test
@@ -348,6 +355,7 @@ based on whether the path name contains .csv or .tsv).
 (module+ test
   
   (check-equal? (xtest "<root>hello</root>") "hello")
+  (check-equal? (xtest "<root>hello &amp; &quot; char ents</root>") "hello & \" char ents")
   (check-equal? (xtest "<root>hello<car>Ford</car></root>") `((*content* . "hello") (car . "Ford") ))
   (check-equal? (xtest "<root><car>Ford</car>hello</root>") `((*content* . "hello") (car . "Ford") ))
   (check-equal? (xtest "<root><car><make>Ford</make><model>Taurus</model></car>
@@ -359,11 +367,13 @@ based on whether the path name contains .csv or .tsv).
                 '((car . (( (model . "Taurus") (make . "Ford") (@year . "1998"))
                           ( (model . "Odyssey") (make . "Honda") (@year . "2005"))))))
   
-  (check-equal? (dict-extend/listify (make-hash) 'hi "new") '#hash((hi . "new")))
-  (check-equal? (dict-extend/listify (hasheq 'bye "old") 'hi "new") (hasheq 'bye "old" 'hi "new"))
-  (check-equal? (dict-extend/listify (hasheq 'hi "new") 'hi "old") (hasheq 'hi (list "new" "old")))
-  (check-equal? (dict-extend/listify (hasheq 'bye "old" 'hi (list "new" "old")) 'hi "good")
-                (hasheq 'bye "old" 'hi (list "new" "old" "good"))))
+  (check-equal? (h->l (dict-extend/listify (make-hash) 'hi "new")) '((hi . "new")))
+  (check-equal? (h->l (dict-extend/listify (make-hash '((bye . "old"))) 'hi "new"))
+                '((hi . "new") (bye . "old")))
+  (check-equal? (h->l (dict-extend/listify (make-hash '((hi . "new"))) 'hi "old"))
+                '((hi . ("new" "old"))))
+  (check-equal? (h->l (dict-extend/listify (make-hash '((bye . "old") (hi . ("new" "old")))) 'hi "good"))
+                '((hi . ("new" "old" "good")) (bye . "old"))))
 
 
 (define-struct xml-infer ()
