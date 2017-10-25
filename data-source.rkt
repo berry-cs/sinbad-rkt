@@ -596,6 +596,8 @@
   final-sig)
 
 (module+ test
+  (struct quake (title time mag) #:transparent)
+  
   (check-equal? (build-sig #t 'dict (list "features" "properties") "title")
                 `(path "features" "properties" ("title")))  ; ((dict ("title" "title"))))
   (check-equal? (build-sig #f 'dict (list "features" "properties") "title")
@@ -613,51 +615,6 @@
   
   (check-equal? 2 (+ 1 1)))
 
-
-
-(define A
-  (send* (connect #:format "json" "http://services.faa.gov/airport/status/ATL")
-    (set-param! "format" "application/json")
-    ;(get-full-path-url)))
-    (load!)
-    (fetch-all)))
-
-
-(define Asub
-  (send* (connect #:format "json" "http://services.faa.gov/airport/status/@{airport-code}")
-    (add-param! (make-param "airport-code" 'path "3 letter airport code" #t))
-    (set-param! "format" "application/json")
-    (set-param! "airport-code" "JFK")
-    ;(get-full-path-url)))
-    (load!)
-    (fetch-all)))
-
-
-
-(define B
-  (send* (connect "https://github.com/tamingtext/book/raw/master/apache-solr/example/exampledocs/books.json")
-    (load!)
-    (fetch-all)))
-
-(define E
-  (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
-    (load!)
-    (fetch-all)))
-
-(require racket/date)
-(struct quake (title time mag) #:transparent)
-
-
-
-#;(unify E `(path "features" "properties" (dict ("description" "title") "time" (magnitude "mag"))))
-#;(unify E `(path "features" "properties" (,quake "title" (,seconds->date "time") "mag")))
-#;(unify E `(path "features" "properties" (,quake "title" (,date->string (,seconds->date "time")) "mag")))
-#;(unify E `(path "features" "properties"
-                  (,quake "title"
-                          (,date->string
-                           (,seconds->date (,/ "time" (value 1000)))
-                           (value #t))
-                          "mag")))
 
 
 
@@ -815,6 +772,55 @@ sig :=    (list <sig>)
 
 
 
+#|
+
+
+(define A
+  (send* (connect #:format "json" "http://services.faa.gov/airport/status/ATL")
+    (set-param! "format" "application/json")
+    ;(get-full-path-url)))
+    (load!)
+    (fetch-all)))
+
+
+(define Asub
+  (send* (connect #:format "json" "http://services.faa.gov/airport/status/@{airport-code}")
+    (add-param! (make-param "airport-code" 'path "3 letter airport code" #t))
+    (set-param! "format" "application/json")
+    (set-param! "airport-code" "JFK")
+    ;(get-full-path-url)))
+    (load!)
+    (fetch-all)))
+
+
+
+(define B
+  (send* (connect "https://github.com/tamingtext/book/raw/master/apache-solr/example/exampledocs/books.json")
+    (load!)
+    (fetch-all)))
+
+(define E
+  (send* (connect "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson")
+    (load!)
+    (fetch-all)))
+
+(require racket/date)
+(struct quake (title time mag) #:transparent)
+
+
+
+#;(unify E `(path "features" "properties" (dict ("description" "title") "time" (magnitude "mag"))))
+#;(unify E `(path "features" "properties" (,quake "title" (,seconds->date "time") "mag")))
+#;(unify E `(path "features" "properties" (,quake "title" (,date->string (,seconds->date "time")) "mag")))
+#;(unify E `(path "features" "properties"
+                  (,quake "title"
+                          (,date->string
+                           (,seconds->date (,/ "time" (value 1000)))
+                           (value #t))
+                          "mag")))
+
+
+
 
 (struct book (title author info) #:transparent)
 (struct info (genre categories) #:transparent)
@@ -850,3 +856,4 @@ sig :=    (list <sig>)
     (set-param! "format" "application/json")
     (load!)
     (display-description))
+|#

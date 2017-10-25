@@ -70,7 +70,8 @@
     
     [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) (proc:id path:str paths:str ...))
      #`(let ([result (send obj fetch #:select pos #:apply proc path paths ...)])  ; apply an explicit function
-         (if (cons? result) (first result) result))]))
+         result)]))
+         ;(if (cons? result) (first result) result))]))
 
 
 (define-syntax (fetch-random stx)
