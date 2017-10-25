@@ -2,6 +2,7 @@
 
 
 (require net/uri-codec
+         file/unzip
          racket/random)
 (require "cacher.rkt"
          "dot-printer.rkt"
@@ -176,7 +177,7 @@
          ; TODO - prep usage info to share ....
          
          (define D (box #f))
-         (define-values (fp zfp) (values #f #f))
+         (define fp #f)
          (define the-cust (make-custodian))
          
          (dynamic-wind
@@ -201,8 +202,10 @@
                                (lookup-entry-data cacher full-path "enc"))]))
 
               (with-handlers ([exn:fail? (λ (e) (sinbad-error (format "failed to load data: ~a" (exn-message e))))])
+                (define zfp (handle-zip fp full-path local-name))
+                
                 (set! the-data (da-load-data data-factory
-                                             (cond [fp fp]
+                                             (cond [zfp zfp]
                                                    [else resolved-path])
                                              enc))
                 (set! sampled? #f)
@@ -213,13 +216,49 @@
           (lambda ()     ; finally:
             (when (unbox D) (stop-dot-printer (unbox D)))
             (when fp (close-input-port fp))
-            (when zfp (close-input-port zfp))
             (custodian-shutdown-all the-cust)
             ;; TODO: share  load   usage
             ))
          
          this]))
 
+
+    (define (handle-zip fp full-path local-name)
+      (cond
+        [(or (smells-like-zip? full-path)
+             (and local-name (smells-like-zip? local-name)))
+         (define zdir (read-zip-directory fp))
+         (define members (map bytes->string/locale (zip-directory-entries zdir)))
+         (printf "Zip members: ~a~n" members)
+
+         (when (and (not (hash-has-key? option-settings 'file-entry))
+                    (= 1 (length members)))
+           (set-option! "file-entry" (car members)))
+
+         (define fe-value (hash-ref option-settings 'file-entry #f))
+         (define fe-subtag (format "file-entry:~a" fe-value))
+         (printf "fe-value: ~a~n" fe-value)
+         
+         (cond
+           [(and fe-value (zip-directory-contains? zdir fe-value))
+            (define entry-cached-path (resolve-cache-path cacher full-path fe-subtag))
+            (cond
+              [entry-cached-path   ; the zip entry was previously cached...
+               (close-input-port fp)
+               (create-input entry-cached-path)]
+              [else    ; not previously cached
+               (call-with-unzip-entry
+                fp fe-value
+                (lambda (tmp-entry-path)
+                  (call-with-input-file tmp-entry-path	 	 	 	 
+                    (lambda (tfp)
+                      (add-to-cache cacher full-path fe-subtag tfp)
+                      (create-input (resolve-cache-path cacher full-path fe-subtag))))))])]
+            
+           [else   ; no fe-value or invalid fe-value
+            (sinbad-error (format "Specify a file-entry from the ZIP file: ~a" members))])]
+        [else fp]))
+    
 
     
     (define/public (fetch-all)

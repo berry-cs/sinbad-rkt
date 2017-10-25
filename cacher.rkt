@@ -18,7 +18,8 @@
          stale?
          update-timeout
          update-directory
-         resolve-cache-path)
+         resolve-cache-path
+         add-to-cache)
 
 ;; *parameter* to globally enable/disable caching behavior
 (define sinbad-cache-enabled (make-parameter #t (lambda (v) (equal? v #t))))

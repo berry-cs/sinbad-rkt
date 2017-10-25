@@ -5,6 +5,7 @@
 
 (provide smells-like-url?
          smells-like-gzip?
+         smells-like-zip?
          create-input
          raw-create-input)
 
@@ -23,6 +24,9 @@
 
 (define (smells-like-gzip? p)
   (string-contains? p ".gz"))
+
+(define (smells-like-zip? p)
+  (string-contains? p ".zip"))
 
 
 
