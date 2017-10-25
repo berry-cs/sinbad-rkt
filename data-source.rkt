@@ -18,6 +18,7 @@
 (provide data-source%
          (struct-out exn:fail:sinbad)
          connect
+         clear-entire-cache
          NEVER-CACHE
          NEVER-RELOAD)
 

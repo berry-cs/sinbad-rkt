@@ -9,6 +9,7 @@
          manifest
          field-list
          data-length
+         cache-directory
          fetch
          fetch-ith
          fetch-first
@@ -49,6 +50,12 @@
     [(data-length obj:expr (~optional base-path #:defaults ([base-path #'#f])))
      #`(let ([data (send obj fetch #:base-path base-path)])
          (if (list? data) (length data) 0))]))
+
+
+(define-syntax (cache-directory stx)
+  (syntax-parse stx
+    [(cache-directory obj:expr)
+     #`(send obj cache-directory)]))
 
 
 

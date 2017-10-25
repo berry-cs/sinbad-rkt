@@ -28,10 +28,10 @@
        (values fmt #`((send #,o set-cache-timeout! t) #,@e-lst) l-exp s-exp d-exp)]
 
       [(((~datum param) n:str v:expr) cs ...)
-       (values fmt #`((send #,o set-param! n v) #,@e-lst) l-exp s-exp d-exp)]
+       (values fmt #`((send #,o set-param! n (format "~a" v)) #,@e-lst) l-exp s-exp d-exp)]
 
       [(((~datum option) n:str v:expr) cs ...)
-       (values fmt #`((send #,o set-option! n v) #,@e-lst) l-exp s-exp d-exp)]
+       (values fmt #`((send #,o set-option! n (format "~a" v)) #,@e-lst) l-exp s-exp d-exp)]
 
       [(((~datum manifest)) cs ...)
        (values fmt e-lst l-exp s-exp #`(send #,o display-description))]
