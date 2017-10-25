@@ -265,17 +265,16 @@ based on whether the path name contains .csv or .tsv).
                    content-seed]
 
                   [(void? prior-seed)    ; empty element - content should be #f
-                   (hasheq tag "")]
+                   (make-hash `((,tag . "")))]
                 
                   [(false? prior-seed)   ; element with no significant content, or what? ... not sure
-                   (hasheq tag content-seed)]
+                   (make-hash `((,tag . ,content-seed)))]
                 
                   [(dict? prior-seed)
                    (dict-extend/listify prior-seed tag content-seed)]
                 
                   [(string? prior-seed)
-                   (hasheq '*content* prior-seed
-                           tag content-seed)]
+                   (make-hash `((*content* . ,prior-seed) (,tag . ,content-seed)))]
                 
                   [else (error "bad")]))
 
@@ -315,19 +314,28 @@ based on whether the path name contains .csv or .tsv).
 
 (define (dict-extend/listify dict key value)
   (cond
-    [(string? dict) (dict-extend/listify (hasheq '*content* dict) key value)]
+    [(string? dict) (dict-extend/listify (make-hash `((*content* . ,dict))) key value)]
     [(not (dict-has-key? dict key))
-     (dict-set dict key value)]
+     (hash-set! dict key value)]
     [(list? (dict-ref dict key))
      (define val-list (dict-ref dict key))
-     (dict-set dict key (append val-list (list value)))]
+     (hash-set! dict key (append val-list (list value)))]
     [else
      (define existing-val (dict-ref dict key))
-     (dict-set dict key (list existing-val value))]))
+     (hash-set! dict key (list existing-val value))])
+  dict)
 
 (define (xtest str)
   (printf "------- Testing: ~a~n" str)
-  (ssax:xml->jsexpr (open-input-string str)))
+  (define (h->l x)
+    (if (hash? x)
+        (for/list ([(k v) (in-dict x)])
+          (if (list? v)
+              (cons k (map h->l v))
+              (cons k (h->l v))))
+        x))
+  (let ([result (ssax:xml->jsexpr (open-input-string str))])
+    (h->l result)))
 
 (xtest "<zippy><pippy pigtails=\"2\">ab duh</pippy>cd hi <no /></zippy>")
 
@@ -340,20 +348,18 @@ based on whether the path name contains .csv or .tsv).
 (module+ test
   
   (check-equal? (xtest "<root>hello</root>") "hello")
-  (check-equal? (xtest "<root>hello<car>Ford</car></root>") (hasheq '*content* "hello"
-                                                                    'car "Ford"))
-  (check-equal? (xtest "<root><car>Ford</car>hello</root>") (hasheq '*content* "hello"
-                                                                    'car "Ford"))
+  (check-equal? (xtest "<root>hello<car>Ford</car></root>") `((*content* . "hello") (car . "Ford") ))
+  (check-equal? (xtest "<root><car>Ford</car>hello</root>") `((*content* . "hello") (car . "Ford") ))
   (check-equal? (xtest "<root><car><make>Ford</make><model>Taurus</model></car>
                          <car><make>Honda</make><model>Odyssey</model></car></root>")
-                (hasheq 'car (list (hasheq 'make "Ford" 'model "Taurus")
-                                                 (hasheq 'make "Honda" 'model "Odyssey"))))
+                '((car . (((model . "Taurus") (make . "Ford"))
+                          ((model . "Odyssey") (make . "Honda"))))))
   (check-equal? (xtest "<root><car year=\"1998\"><make>Ford</make><model>Taurus</model></car>
                          <car year=\"2005\"><make>Honda</make><model>Odyssey</model></car></root>")
-                (hasheq 'car (list (hasheq 'make "Ford" 'model "Taurus" '@year "1998")
-                                                 (hasheq 'make "Honda" 'model "Odyssey" '@year "2005"))))
+                '((car . (( (model . "Taurus") (make . "Ford") (@year . "1998"))
+                          ( (model . "Odyssey") (make . "Honda") (@year . "2005"))))))
   
-  (check-equal? (dict-extend/listify (hasheq ) 'hi "new") (hasheq 'hi "new"))
+  (check-equal? (dict-extend/listify (make-hash) 'hi "new") '#hash((hi . "new")))
   (check-equal? (dict-extend/listify (hasheq 'bye "old") 'hi "new") (hasheq 'bye "old" 'hi "new"))
   (check-equal? (dict-extend/listify (hasheq 'hi "new") 'hi "old") (hasheq 'hi (list "new" "old")))
   (check-equal? (dict-extend/listify (hasheq 'bye "old" 'hi (list "new" "old")) 'hi "good")
