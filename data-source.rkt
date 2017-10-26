@@ -18,6 +18,7 @@
 (provide data-source%
          (struct-out exn:fail:sinbad)
          connect
+         connect-using
          clear-entire-cache
          NEVER-CACHE
          NEVER-RELOAD)
@@ -54,6 +55,19 @@
     (if type-ext
         (format "no data source plugin for type ~a" type-ext)
         (format "could not infer data format for ~a" path)))))
+
+
+(define (connect-using spec-path)
+  (define the-cust (make-custodian))
+  (dynamic-wind
+   (lambda () (void))
+   
+   (lambda ()    ; try:
+     (parameterize ([current-custodian the-cust])
+       (load-spec-file (create-input spec-path))))
+
+   (lambda ()    ; finally:
+     (custodian-shutdown-all the-cust))))
 
 
 ; key is string
@@ -455,11 +469,25 @@
       (unless (empty? param-keys)
         (printf "~nThe following (connection) parameters may/must be set on this data source:~n")
 
-        ; TODO
-        
-          )
+        (for ([p-key param-keys])
+          (define prm (dict-ref params p-key))
+          (define p-val (dict-ref param-values p-key #f))
+          (define desc (if (param-description prm)
+                           (format "~n     ~a" (param-description prm))
+                           ""))
+          (define req (if (param-required? prm) " [*required]" ""))
+          (define val-str (if p-val
+                              (format "currently set to: ~a" p-val)
+                              "not set"))
+          (printf "   - ~a (~a)~a~a~n" (symbol->string p-key) val-str req desc)))
 
-      ; TODO ... options      
+      (define opt-keys (sort (da-options data-factory) string<=?))
+      (unless (empty? opt-keys)
+        (printf "~nThe following options are available for this data source format:~n")
+        (for ([o-key opt-keys])
+          (define o-val (da-get-option data-factory o-key))
+          (define val-str (if o-val (format " (currently set to: \"~a\")" o-val) ""))
+          (printf "   - ~a~a~n" o-key val-str)))
 
       (if (has-data?)
           (printf "~nThe following data is available:~n~a~n" (description))
@@ -505,6 +533,10 @@
       (set! params (hash-set params (string->symbol (param-key prm)) prm))
       this)
 
+    (define/public (set-name&info! _name _info-url _info-text)
+      (set! name _name)
+      (set! info-url _info-url)
+      (set! info-text _info-text))
     
     ))
 
@@ -773,6 +805,52 @@ sig :=    (list <sig>)
                (string-downcase (symbol->string s2)))))
 
 
+;### ----------------------------------------------------------------------
+
+(define (load-spec-file fp)
+  "Loads a specification file from the given input-port and
+   instantiates and prepares a data-source object based on that."
+
+  (with-handlers ([exn:fail? (λ (e) (sinbad-error (format "failed to load specification file: ~a" (exn-message e))))])
+    (define spec (read-json fp))
+    (unless (dict-has-key? spec 'path) (error "invalid specification file"))
+
+    (define path (dict-ref spec 'path))
+    (define ds (connect path #:format (dict-ref spec 'format #f)))
+
+    (send ds set-name&info!
+          (or (dict-ref spec 'name path))
+          (dict-ref spec 'infourl #f)
+          (dict-ref spec 'description #f))
+
+    (when (dict-has-key? spec 'cache)
+      (define c (dict-ref spec 'cache))
+      (define timeout (dict-ref c 'timeout #f))
+      (define directory (dict-ref c 'directory #f))
+      (when timeout (send ds set-cache-timeout! timeout))
+      (when directory (send ds set-cache-directory! directory)))
+
+    (for ([d (dict-ref spec 'params '())])   ; handle param list
+      (define prm (make-param (dict-ref d 'key)
+                              (string->symbol (dict-ref d 'type))
+                              (dict-ref d 'description #f)
+                              (string->boolean/try (dict-ref d 'required #f))))
+      (send ds add-param! prm)
+      (when (dict-has-key? d 'value)
+        (send ds set-param! (dict-ref d 'key) (dict-ref d 'value))))
+
+    (for ([opt (dict-ref spec 'options '())])   ; handle option list
+      (send ds set-option! (dict-ref opt 'name) (dict-ref opt 'value)))
+
+    ;(display spec)(newline)
+    
+    ds))
+
+
+
+
+
+;### ----------------------------------------------------------------------
 
 #|
 
