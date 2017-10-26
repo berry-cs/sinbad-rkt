@@ -447,7 +447,8 @@ based on whether the path name contains .csv or .tsv).
             (string-join (csv-access-field-names da) ",")
             #f)]
        [(string=? k DELIMITER-OPT)
-        (csv-access-delimiter da)]
+        (and (csv-access-delimiter da)
+             (format "~a" (csv-access-delimiter da)))]
        [(string=? k SKIP-ROWS-OPT)
         (or (csv-access-skip-rows da) 0)]       
        [else #f]))
@@ -516,10 +517,10 @@ based on whether the path name contains .csv or .tsv).
 ;; string -> boolean or string
 (define (string->boolean/try s)
   (cond
-    [(not (string? s)) s]
-    [(member (string-downcase s) '("true" "yes"))]
-    [(member (string-downcase s) '("false" "no"))]
-    [else s]))
+         [(not (string? s)) s]
+         [(member (string-downcase s) '("true" "yes")) #t]
+         [(member (string-downcase s) '("false" "no")) #f]
+         [else s]))
 
 
 

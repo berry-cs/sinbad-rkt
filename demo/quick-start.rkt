@@ -166,6 +166,30 @@ exploring
            (manifest)))
 
 (load per-ds/spec)
+(manifest per-ds/spec)
+
+"EXPORT SPEC ----------------------------------------------------------------------"
+
+(export kiva-ds/p "~/Desktop/spec.txt")
+; only works if file doesn't already exist
+
+"QUERY vs PATH ----------------------------------------------------------------------"
+
+#;
+(sail-to (spec "https://raw.githubusercontent.com/berry-cs/sinbad/master/docs/faa_status.spec")
+         (load))
+; not ready to load; missing params: airport_code
+
+(sail-to (spec "https://raw.githubusercontent.com/berry-cs/sinbad/master/docs/faa_status.spec")
+         (manifest))
+
+(sail-to (spec "https://raw.githubusercontent.com/berry-cs/sinbad/master/docs/faa_status.spec")
+         (load)
+         (manifest)
+         (param "airport_code" "ATL"))
+
+; note the URL filled in with path param
+
 
 
 

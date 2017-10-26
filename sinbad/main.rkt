@@ -11,6 +11,7 @@
          data-length
          cache-directory
          clear-entire-cache
+         export
          fetch
          fetch-ith
          fetch-first
@@ -62,6 +63,13 @@
   (syntax-parse stx
     [(cache-directory obj:expr)
      #`(send obj cache-directory)]))
+
+
+(define-syntax (export stx)
+  (syntax-parse stx
+    [(export obj:expr path:str)
+     #`(let ([r (send obj export path)])
+         #t)]))
 
 
 

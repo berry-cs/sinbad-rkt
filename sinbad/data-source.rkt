@@ -4,7 +4,7 @@
 (require net/uri-codec
          file/unzip
          racket/random
-         (only-in json jsexpr->bytes))
+         (only-in json jsexpr->bytes jsexpr->string))
 (require "cacher.rkt"
          "dot-printer.rkt"
          "plugin.rkt"
@@ -76,6 +76,16 @@
 
 (define (make-param key type [desc #f] [req? #f])
   (param key type desc req?))
+
+(define (param->jsexpr prm val)
+  (let ([e (hasheq 'key (param-key prm)
+                   'type (symbol->string (param-type prm))
+                   'required (param-required? prm))])
+    (let ([e (if (param-description prm)
+                 (hash-set e 'description (param-description prm))
+                 e)])
+      (let ([e (if val (hash-set e 'value val) e)])
+        e))))
 
 
 (struct exn:fail:sinbad exn:fail ()
@@ -551,6 +561,63 @@
       (set! params (hash-set params (string->symbol (param-key prm)) prm))
       this)
 
+
+    ;; -------------- spec export -----------------------------------------
+
+    (define/public (export [port/path #f])
+      "Exports a jsexpr describing this data-source (in the format
+        used for specification files).
+        
+        If a port or file path is provided, the specification
+        is saved to the file."
+
+      (define spec (make-hasheq))
+
+      (when path (hash-set! spec 'path path))
+      (when name (hash-set! spec 'name name))
+      (when format-type (hash-set! spec 'format format-type))
+      (when info-url (hash-set! spec 'infourl info-url))
+      (when info-text (hash-set! spec 'description info-text))
+
+      (define cache-spec (make-hasheq))
+      (hash-set! cache-spec 'timeout
+                 (let ([e (cacher-expiration cacher)])
+                   (cond [(<= e 0) e]
+                         [(integer? (/ e 1000)) (/ e 1000)]
+                         [else (exact->inexact (/ e 1000))])))
+      (when (not (equal? (cacher-directory cacher) (cacher-directory default-cacher)))
+        (hash-set! cache-spec 'directory (cacher-directory cacher)))
+      (hash-set! spec 'cache cache-spec)
+
+      (define opt-list '())
+      (for ([(k v) (in-dict option-settings)])
+        (set! opt-list (cons (hasheq 'name k 'value v) opt-list)))
+      (for ([k (da-options data-factory)])
+        (define v (da-get-option data-factory k))
+        (when v
+          (set! opt-list (cons (hasheq 'name k 'value v) opt-list))))
+      (hash-set! spec 'options opt-list)
+
+      (define param-list '())
+      (for ([(k prm) (in-dict params)])
+        (set! param-list (cons (param->jsexpr prm (dict-ref param-values k #f)) param-list)))
+      (for ([(k v) (in-dict param-values)])
+        (when (not (dict-has-key? params k))
+          (define prm (make-param (symbol->string k) 'query))
+          (set! param-list (cons (param->jsexpr prm (dict-ref param-values k #f)) param-list))))
+      (hash-set! spec 'params param-list)
+
+      (cond
+        [(path-string? port/path)
+         (with-output-to-file (expand-user-path port/path)
+           (lambda () (display (jsexpr->string spec))))]
+        [(output-port? port/path)
+         (display (jsexpr->string spec) port/path)])
+      
+      spec)
+
+
+    
 
     ;; -------------- data unification -----------------------------------------
 

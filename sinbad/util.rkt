@@ -86,7 +86,7 @@
          (when R2 (set-box! charset (second R2))))
        ip]
     [(string-prefix? path "wss:")  #f]
-    [else (open-input-file path)]))
+    [else (open-input-file (expand-user-path path))]))
 
   (define final-fp
     (cond
