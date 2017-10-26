@@ -205,7 +205,7 @@ based on whether the path name contains .csv or .tsv).
 
 (define (sample-data obj max-elts [seed #f])
   (when seed
-    (random-seed seed))
+    (random-seed seed))   ; only seed the at the top-level recursive call
 
   (cond
     [(dict? obj)
@@ -219,6 +219,7 @@ based on whether the path name contains .csv or .tsv).
                              obj
                              (sort (random-sample (length obj) max-elts #:replacement? #f) <))))
      (map (lambda (v) (sample-data v max-elts)) top-sample)]
+    [(and (real? obj) (exact? obj)) (exact->inexact obj)]
     [else obj]))
 
 

@@ -19,7 +19,6 @@
          (struct-out exn:fail:sinbad)
          connect
          connect-using
-         clear-entire-cache
          NEVER-CACHE
          NEVER-RELOAD)
 
@@ -90,7 +89,7 @@
 
 
 (define data-source%
-  (class object%
+  (class* object% (printable<%>)
     (super-new)
     ;(inspect #f)
     
@@ -101,7 +100,8 @@
     
     (field
      [info-url    #f]
-     [info-text   #f])
+     [info-text   #f]
+     [random-index #f])
 
     ;; private fields ----------------------------------------------------------
     (define cacher       default-cacher)
@@ -115,8 +115,7 @@
     (define the-data #f)
     (define sampled?     #f)   ; whether the-data is a sample of the actual data
 
-    (define random-index #f)
-
+    
     ; all the following hash tables assume *symbols* as the key
     
     (define option-settings (hasheq))  ; generic options for the data-source; the data-factory
@@ -127,7 +126,19 @@
     (define params (hasheq))   ; keeps track of *all* parameters information available for this data source
     (define param-values (hasheq)) ; # keeps track of the values of the supplied parameters
     
+
+
+    ;; printing ----------------------------------------------------------------
+
+    (define/public (custom-print out quote-depth)
+      (fprintf out "<data-source-object: ~a>" path))
     
+    (define/public (custom-write out)
+      (fprintf out "<data-source-object: ~a>" path))
+
+    (define/public (custom-display out)
+      (fprintf out "<data-source-object: ~a>" path))
+
 
     ;; methods -----------------------------------------------------------------
 
@@ -361,9 +372,11 @@
       (load-sample! max-elts random-seed #t))
 
 
+    (define/public (clear-cache)
+      (clear-entire-cache cacher))
 
 
-    
+    ;;   FETCHING ---------------------------------
     
     (define/public (fetch-all)
       (unless (has-data?) (sinbad-error "no data available - make sure you called (load)"))
@@ -372,7 +385,10 @@
     
 
     (define/public (fetch #:base-path [base-path #f] #:select [select #f] #:apply [func 'dict] . field-paths)
-      (cond
+      (let ([select (if (and (eq? 'random select) random-index)
+                        random-index
+                        select)])
+       (cond
         [(empty? field-paths)
          (if base-path
              (fetch #:select select #:apply func base-path)
@@ -404,8 +420,8 @@
 
          (define final-sig
            (apply build-sig (not select) func base-path-fields field-paths-split))
-         (dprintf "final-sig: ~s~n" final-sig)
-         (real-unify (fetch-all) final-sig select #f)]))
+         (printf "final-sig: ~s~n" final-sig)
+         (real-unify (fetch-all) final-sig select #f)])))
 
 
     
@@ -491,7 +507,9 @@
 
       (if (has-data?)
           (printf "~nThe following data is available:~n~a~n" (description))
-          (printf "~n*** Data not loaded *** ... use (load)~n~n")))
+          (printf "~n*** Data not loaded *** ... use (load)~n~n"))
+
+      this)
     
 
     ;;; --- various options management methods ---------------------------------
@@ -533,10 +551,122 @@
       (set! params (hash-set params (string->symbol (param-key prm)) prm))
       this)
 
-    (define/public (set-name&info! _name _info-url _info-text)
-      (set! name _name)
-      (set! info-url _info-url)
-      (set! info-text _info-text))
+
+    ;; -------------- data unification -----------------------------------------
+
+    (define (apply-select data select)
+      (if (or (not select) (not (list? data)))
+          data
+          (match select
+            [(? nonnegative-integer? i)  (list-ref data i)]
+            [(? negative-integer? i)     (list-ref data (+ (length data) i))]
+            ['random
+             (define selected-index (random-ref (length data)))
+             (set! random-index (append (or random-index '()) (list selected-index)))
+             (list-ref data selected-index)]
+            [(list (? nonnegative-integer? i) is ...) (list-ref data i)]
+            [(list (? negative-integer? i) is ...)    (list-ref data (+ (length data) i))]
+            [#f                          (list-ref data 0)])))
+
+#|
+sig :=    (list <sig>)
+     |    (list <function> <sig> ...)
+     |    (list 'dict (<name> <sig>) ...)
+     |    (list 'path <sig>)
+     |    <path-string>
+|#
+
+    ;; unify : jsexpr sig [integer? or #f or 'random or (list integer? ...)]  -> (list any)
+    ;(define (unify data sig [select #f] [as-list #f])
+    ;  (real-unify data sig select as-list))
+
+    (define (real-unify data sig select as-list)
+      (define upd-select   ; "use-up" the select index
+        (match select
+          [(list x) #f]
+          [(list x xs ...) xs]
+          ['random select]      ; let 'random flow through
+          [_ #f]))
+  
+      (match sig
+        [(list (? procedure? f) ss ...)
+         (dprintf "apply ~a to:\n~a\n" (object-name f) ss)
+         (match data
+           [(list ds ...)
+            (if as-list
+                (flatten (map (λ(d) (real-unify d sig select as-list)) ds))
+                (real-unify (apply-select ds select) sig upd-select as-list))]
+           [(? dict? _)
+            (define p-unif (map (λ (s) (real-unify data s select as-list)) ss))
+            (apply f p-unif) ])]
+
+    
+        [(list 'dict ss ...)
+         (dprintf "dict of ~a~n" ss)
+         (match data
+           [(list ds ...)
+            (if as-list
+                (flatten (map (λ(d) (real-unify d sig select as-list)) ds))
+                (real-unify (apply-select ds select) sig upd-select as-list))]
+           [(? dict? _)
+            (define assocs (map (λ(sub)
+                                  (define-values (n s)
+                                    (match sub
+                                      [(list n s) (values n s)]
+                                      [(? string? s) (values s s)]))
+                                  (cons (cond
+                                          [(symbol? n) n]
+                                          [(string? n) (string->symbol n)])
+                                        (real-unify data s select as-list)))
+                                ss))
+            (make-hasheq assocs)])]
+
+    
+        [(list 'path p ps ... s)
+         (dprintf "traverse ~a ~a~n" p ps)
+
+         (define (traverse data path)
+           (match data
+             [(? dict? _) (dict-ref data (if (symbol? p) p (string->symbol p)))]
+             [(? list? _) (flatten (map (λ(d) (traverse d path)) data))]
+             [else (sinbad-error (format "no path to ~a ~a" p ps))]))
+
+         (define p-data (traverse data p))
+       
+         (if (cons? ps)
+             (real-unify p-data (append (cons 'path ps) (list s)) select as-list)
+             (real-unify p-data s select as-list))]
+
+
+        [(list 'value v) v]
+
+    
+        [(list s)
+         (define result
+           (match data
+             [(list ds ...)
+              (dprintf "collecting list~n")
+              (map (λ (d) (real-unify d s select #t)) ds)]
+             [_
+              (dprintf "wrapping list~n")
+              (real-unify data s select #t)]))
+         (if (and (cons? s) (eq? (car s) list))   ; don't flatten explicit (list ...) constructor requests
+             result
+             (flatten result))]
+
+    
+        [(? string? p)
+         ;(printf "contents of ~a at ~a~n" p (list->string (take (string->list (format "~a" data)) 1000)))
+         (define result
+           (match data
+             [(or (? string? _) (? boolean? _) (? number? _)) data]
+             [(? dict? _) (let ([r (dict-ref data (string->symbol p))])
+                            (if select (apply-select r select) r))]
+             [(? list? _) (real-unify (apply-select data select) sig upd-select as-list)]
+             [else (sinbad-error "not primitive data")]))
+         result]))
+    
+
     
     ))
 
@@ -652,114 +782,7 @@
 
 
 
-(define (apply-select ds select)
-  (if (or (not select) (not (list? ds)))
-      ds
-      (match select
-        [(? nonnegative-integer? i)  (list-ref ds i)]
-        [(? negative-integer? i)     (list-ref ds (+ (length ds) i))]
-        ['random                     (random-ref ds)]
-        [(list (? nonnegative-integer? i) is ...) (list-ref ds i)]
-        [(list (? negative-integer? i) is ...)    (list-ref ds (+ (length ds) i))]
-        [#f                          (list-ref ds 0)])))
 
-#|
-sig :=    (list <sig>)
-     |    (list <function> <sig> ...)
-     |    (list 'dict (<name> <sig>) ...)
-     |    (list 'path <sig>)
-     |    <path-string>
-|#
-
-;; unify : jsexpr sig [integer? or #f or 'random or (list integer? ...)]  -> (list any)
-(define (unify data sig [select #f] [as-list #f])
-  (real-unify data sig select as-list))
-
-(define (real-unify data sig select as-list)
-  (define upd-select   ; "use-up" the select index
-    (match select
-      [(list x) #f]
-      [(list x xs ...) xs]
-      ['random select]      ; let 'random flow through
-      [_ #f]))
-  
-  (match sig
-    [(list (? procedure? f) ss ...)
-     (dprintf "apply ~a to:\n~a\n" (object-name f) ss)
-     (match data
-       [(list ds ...)
-        (if as-list
-            (flatten (map (λ(d) (real-unify d sig select as-list)) ds))
-            (real-unify (apply-select ds select) sig upd-select as-list))]
-       [(? dict? _)
-        (define p-unif (map (λ (s) (real-unify data s select as-list)) ss))
-        (apply f p-unif) ])]
-
-    
-    [(list 'dict ss ...)
-     (dprintf "dict of ~a~n" ss)
-     (match data
-       [(list ds ...)
-        (if as-list
-            (flatten (map (λ(d) (real-unify d sig select as-list)) ds))
-            (real-unify (apply-select ds select) sig upd-select as-list))]
-       [(? dict? _)
-        (define assocs (map (λ(sub)
-                              (define-values (n s)
-                                (match sub
-                                  [(list n s) (values n s)]
-                                  [(? string? s) (values s s)]))
-                              (cons (cond
-                                      [(symbol? n) n]
-                                      [(string? n) (string->symbol n)])
-                                    (real-unify data s select as-list)))
-                            ss))
-        (make-hasheq assocs)])]
-
-    
-    [(list 'path p ps ... s)
-     (dprintf "traverse ~a ~a~n" p ps)
-
-     (define (traverse data path)
-       (match data
-         [(? dict? _) (dict-ref data (if (symbol? p) p (string->symbol p)))]
-         [(? list? _) (map (λ(d) (traverse d path)) data)]
-         [else (sinbad-error (format "no path to ~a ~a" p ps))]))
-
-     (define p-data (traverse data p))
-       
-     (if (cons? ps)
-         (real-unify p-data (append (cons 'path ps) (list s)) select as-list)
-         (real-unify p-data s select as-list))]
-
-
-    [(list 'value v) v]
-
-    
-    [(list s)
-     (define result
-       (match data
-         [(list ds ...)
-          (dprintf "collecting list~n")
-          (map (λ (d) (real-unify d s select #t)) ds)]
-         [_
-          (dprintf "wrapping list~n")
-          (real-unify data s select #t)]))
-     (if (and (cons? s) (eq? (car s) list))   ; don't flatten explicit (list ...) constructor requests
-         result
-         (flatten result))]
-
-    
-    [(? string? p)
-     (dprintf "contents of ~a at ~a~n" p data)
-     (define result
-       (match data
-         [(or (? string? _) (? boolean? _) (? number? _)) data]
-         [(? dict? _) (let ([r (dict-ref data (string->symbol p))])
-                        (if select (apply-select r select) r))]
-         [(? list? _) (real-unify (apply-select data select) sig upd-select as-list)]
-         [else (sinbad-error "not primitive data")]))
-     result]))
 
 
 (define (json-describe thing [indent 0])
@@ -818,10 +841,9 @@ sig :=    (list <sig>)
     (define path (dict-ref spec 'path))
     (define ds (connect path #:format (dict-ref spec 'format #f)))
 
-    (send ds set-name&info!
-          (or (dict-ref spec 'name path))
-          (dict-ref spec 'infourl #f)
-          (dict-ref spec 'description #f))
+    (set-field! name ds (dict-ref spec 'name path))
+    (set-field! info-url ds (dict-ref spec 'infourl #f))
+    (set-field! info-text ds (dict-ref spec 'description #f))
 
     (when (dict-has-key? spec 'cache)
       (define c (dict-ref spec 'cache))
@@ -845,9 +867,6 @@ sig :=    (list <sig>)
     ;(display spec)(newline)
     
     ds))
-
-
-
 
 
 ;### ----------------------------------------------------------------------

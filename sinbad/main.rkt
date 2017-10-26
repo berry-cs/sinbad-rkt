@@ -10,6 +10,7 @@
          field-list
          data-length
          cache-directory
+         clear-entire-cache
          fetch
          fetch-ith
          fetch-first
@@ -24,6 +25,11 @@
          fetch-first-boolean
          fetch-ith-boolean
          fetch-random-boolean)
+
+
+(define-syntax (clear-entire-cache stx)
+  (syntax-parse stx
+    [(clear-entire-cache obj:expr) #'(send obj clear-cache)]))
 
 
 (define-syntax (load stx)
@@ -59,28 +65,45 @@
 
 
 
+(define (hash->assoc data)
+  (cond
+    [(list? data) (map hash->assoc data)]
+    [(hash? data)
+     (sort
+      (for/list ([(k v) (in-dict data)])
+        (cons (format "~a" k) (hash->assoc v)))
+      (lambda (p1 p2) (string<=? (car p1) (car p2))))]
+    [else data]))
+
+
 (define-syntax (fetch stx)
   (syntax-parse stx
+    [(fetch obj:expr)
+     #`(hash->assoc (send obj fetch))]
+    
     [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str)
-     #`(send obj fetch #:select pos path)]
+     #`(hash->assoc (send obj fetch #:select pos path))]
     
-    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str paths:str ...)
-     #`(let ([result (send obj fetch #:select pos #:apply list path paths ...)])  ; constructs a list of lists
-         result)]
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str paths:str ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+     #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply list path paths ...)])  ; constructs a list of lists
+         (hash->assoc result))]
     
-    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) (proc:id path:str paths:str ...))
-     #`(let ([result (send obj fetch #:select pos #:apply proc path paths ...)])  ; apply an explicit function
-         result)]))
-         ;(if (cons? result) (first result) result))]))
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) (proc:id path:str paths:str ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+     #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply proc path paths ...)])  ; apply an explicit function
+         (hash->assoc result))]))
 
 
 (define-syntax (fetch-random stx)
   (syntax-parse stx
+    [(fetch-random obj:expr)
+     #`(hash->assoc (send obj fetch #:select 'random))]
     [(fetch-random obj:expr rest ...)
      #'(fetch obj #:select 'random rest ...)]))
 
 (define-syntax (fetch-ith stx)
   (syntax-parse stx
+    [(fetch-ith obj:expr i:exact-nonnegative-integer)
+     #`(hash->assoc (send obj fetch #:select i))]
     [(fetch-ith obj:expr i:exact-nonnegative-integer rest ...)
      #'(fetch obj #:select i rest ...)]))
 

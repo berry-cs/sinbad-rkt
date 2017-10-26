@@ -60,12 +60,13 @@
 
 (define-syntax (sail-to stx)
   (syntax-parse stx
-    [(sail-to url clauses ...)
+    [(sail-to (~or ((~datum spec) spec-url) url:expr) clauses ...)
 
        (let-values ([(fmt e-lst l-exp s-exp d-exp) (process-clauses stx #'(clauses ...) #'o)])
-         (let* ([connect-expr (if fmt
-                                  #`(connect url #:format #,fmt)
-                                  #`(connect url))]
+         (let* ([connect-expr (cond
+                                [(and (attribute url) fmt) #`(connect url #:format #,fmt)]
+                                [(attribute url) #`(connect url)]
+                                [else #`(connect-using spec-url)])]
                 [load/samp-lst (if l-exp (list l-exp) (if s-exp (list s-exp) '()))]
                 [load/samp+descr-lst (if d-exp
                                          (append load/samp-lst (list d-exp))
