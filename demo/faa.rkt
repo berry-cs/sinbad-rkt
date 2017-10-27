@@ -4,14 +4,14 @@
 
 (require sinbad)
 
-(define-struct port (name loc condition delay?))
-
 (define faa
   (sail-to (string-append "http://services.faa.gov/airport/status/ATL")
            (format "xml")
            (param "format" "application/xml")
            ;(cache-timeout 300)  ; refresh every 5 minutes
            (load)))
+
+(define-struct port (name loc condition delay?))
 
 (fetch faa (make-port "Name" "State" "Weather/Weather" "Delay"))
 

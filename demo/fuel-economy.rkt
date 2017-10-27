@@ -4,7 +4,6 @@
 
 (require sinbad)
 
-
 (fetch
  (sail-to "http://www.fueleconomy.gov/ws/rest/fuelprices"
           (format "xml") (load) (manifest)))

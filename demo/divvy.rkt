@@ -16,6 +16,10 @@
 (fetch-random divvy-live (assoc "stationName" "availableBikes" "availableDocks" "status")
                 (base-path "stationBeanList"))
 
+(define live-stns
+  (fetch divvy-live "stationName" "availableBikes" "availableDocks" "status"
+                (base-path "stationBeanList")))
+
 
 
 

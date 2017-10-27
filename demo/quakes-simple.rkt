@@ -16,15 +16,20 @@
   (date->string (seconds->date (/ v 1000)) #t))
 
 
-; full-featured fetch API
+
+; demonstrates full-featured  fetch*  API
 (define data
   (fetch* Q `(path "features" "properties"
                    (,make-quake "place"
                                 (,quake-ts->timestr "time")
                                 "mag"))))
 
-; with keyword arguments
+; ... with keyword arguments
 (fetch* Q `(path "properties"
                    (,make-quake "place"
                                 (,quake-ts->timestr "time")
-                                "mag")) #:base-path "features" #:select 'random)
+                                "mag"))
+        #:base-path "features"
+        #:select 'random)
+
+data

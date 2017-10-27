@@ -4,8 +4,6 @@
 
 (require sinbad)
 
-
-
 (define forex
   (sail-to "http://www.ecb.europa.eu/stats/eurofxref/eurofxref.zip?67c3c8747f374aba449f070f4e808308"
            (format "csv") (load)))
@@ -24,11 +22,11 @@ currencies
   (sail-to "http://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip?67c3c8747f374aba449f070f4e808308"
            (format "csv") (load)))
 
-(data-length forex/hist)   ; ~4800 rows or something like that
+(data-length forex/hist)   ; ~4800 
 
-(define all-usd (fetch forex/hist "Date" "USD"))
+(define all-usd (fetch forex/hist "Date" "USD"))  ; list of ~4000+ exchange rate values for USD
 
-(define all-data (fetch forex/hist))
+(define all-data (fetch forex/hist))              ; fetch all currencies, all dates
 (first all-data)
 
 (rest (assoc "Date" (first all-data)))

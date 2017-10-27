@@ -1,7 +1,6 @@
 #lang racket
 
-(require racket/date
-         sinbad)
+(require sinbad)
 
 (define-struct quake (title time mag) #:transparent)
 
@@ -28,7 +27,6 @@
     (define news (for/list ([q data] #:when (not (member (quake-title q) collected)))
                    (print-quake q)
                    (quake-title q)))
-    (when (not (empty? news)) (printf "~a~n" (length collected)))
     (if (and (> (length collected) 10) (empty? news))
         (LOOP (map quake-title data))  ; ... so that collected doesn't grow forever
         (LOOP (append collected news)))))
