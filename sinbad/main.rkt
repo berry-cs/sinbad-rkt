@@ -11,6 +11,7 @@
          manifest
          field-list
          data-length
+         has-fields?
          cache-directory
          clear-entire-cache
          export
@@ -60,6 +61,16 @@
     [(data-length obj:expr (~optional base-path #:defaults ([base-path #'#f])))
      #`(let ([data (send obj fetch #:base-path base-path)])
          (if (list? data) (length data) 0))]))
+
+
+(define-syntax (has-fields? stx)
+  (syntax-parse stx
+    [(has-fields? obj:expr (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+     (raise-syntax-error 'has-fields? "at least one field path must be provided" stx)]
+    
+    [(has-fields? obj:expr paths:str ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+     #`(send obj has-fields? paths ... #:base-path bp)]))
+
 
 
 (define-syntax (cache-directory stx)
