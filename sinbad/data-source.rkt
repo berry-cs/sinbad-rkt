@@ -280,7 +280,7 @@
          (define fe-value (hash-ref option-settings 'file-entry #f))
          (define fe-subtag (format "file-entry:~a" fe-value))
          ;(printf "fe-value: ~a~n" fe-value)
-         (printf "tags: ~a ~a~n" full-path fe-subtag)
+         ;(printf "tags: ~a ~a~n" full-path fe-subtag)
          
          (cond
            [(and fe-value (zip-directory-contains? zdir fe-value))
