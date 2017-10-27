@@ -67,9 +67,12 @@
   (syntax-parse stx
     [(has-fields? obj:expr (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      (raise-syntax-error 'has-fields? "at least one field path must be provided" stx)]
+
+    [(has-fields? obj:expr paths:expr ...((~datum base-path) bp))
+     #`(send obj has-fields? paths ... #:base-path bp)]
     
-    [(has-fields? obj:expr paths:expr ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
-     #`(send obj has-fields? paths ... #:base-path bp)]))
+    [(has-fields? obj:expr paths:expr ...)
+     #`(send obj has-fields? paths ...)]))
 
 
 
@@ -117,20 +120,26 @@
     [(fetch obj:expr)
      #`(unwrap-if-single (hash->assoc (send obj fetch)))]
     
-    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
-     #`(unwrap-if-single (hash->assoc (send obj fetch #:select pos path)))]
-    
-    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr paths:expr ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
-     #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply list path paths ...)])  ; constructs a list of lists
-         (unwrap-if-single (hash->assoc result)))]
-
     [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) ((~literal assoc) path:expr paths:expr ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply 'dict path paths ...)])  ; build dictionary (assoc list) of data
          (unwrap-if-single (hash->assoc result)))]
     
     [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) (proc:id path:expr paths:expr ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply proc path paths ...)])  ; apply an explicit function
-         (unwrap-if-single result))]))
+         (unwrap-if-single result))]
+
+    ;; this case comes after the two above because otherwise it is matched first
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)   ; selecting a single path - usually path:str, but could be expr
+     #`(unwrap-if-single (hash->assoc (send obj fetch #:select pos path)))]
+
+    ;; this case is duplicated to catch the base-path clause version first, otherwise (base-path ...) matches as a paths:expr
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr paths:expr ... ((~datum base-path) bp))
+     #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply list path paths ...)])  ; constructs a list of lists
+         (unwrap-if-single (hash->assoc result)))]
+    
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr paths:expr ... )
+     #`(let ([result (send obj fetch #:select pos #:apply list path paths ...)])  ; constructs a list of lists
+         (unwrap-if-single (hash->assoc result)))]))
 
 
 (define-syntax (fetch-random stx)
