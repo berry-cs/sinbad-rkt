@@ -68,7 +68,7 @@
     [(has-fields? obj:expr (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      (raise-syntax-error 'has-fields? "at least one field path must be provided" stx)]
     
-    [(has-fields? obj:expr paths:str ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+    [(has-fields? obj:expr paths:expr ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      #`(send obj has-fields? paths ... #:base-path bp)]))
 
 
@@ -117,18 +117,18 @@
     [(fetch obj:expr)
      #`(unwrap-if-single (hash->assoc (send obj fetch)))]
     
-    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str)
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(unwrap-if-single (hash->assoc (send obj fetch #:select pos path)))]
     
-    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str paths:str ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr paths:expr ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply list path paths ...)])  ; constructs a list of lists
          (unwrap-if-single (hash->assoc result)))]
 
-    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) ((~literal assoc) path:str paths:str ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) ((~literal assoc) path:expr paths:expr ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply 'dict path paths ...)])  ; build dictionary (assoc list) of data
          (unwrap-if-single (hash->assoc result)))]
     
-    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) (proc:id path:str paths:str ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) (proc:id path:expr paths:expr ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply proc path paths ...)])  ; apply an explicit function
          (unwrap-if-single result))]))
 
@@ -160,28 +160,28 @@
 
 (define-syntax (fetch-number stx)
   (syntax-parse stx
-    [(fetch-float obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str)
+    [(fetch-float obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(let ([result (send obj fetch #:select pos path)]
              [->number (lambda (s) (if (string? s) (or (string->number (string-trim s)) 0) 0))])
          (if (list? result) (map ->number result) (->number result)))]))
 
 (define-syntax (fetch-first-number stx)
   (syntax-parse stx
-    [(fetch-first-number obj:expr path:str) #'(fetch-number obj #:select 0 path)]))
+    [(fetch-first-number obj:expr path:expr) #'(fetch-number obj #:select 0 path)]))
 
 (define-syntax (fetch-ith-number stx)
   (syntax-parse stx
-    [(fetch-ith-number obj:expr i:exact-nonnegative-integer path:str)
+    [(fetch-ith-number obj:expr i:exact-nonnegative-integer path:expr)
      #'(fetch-number obj #:select i path)]))
 
 (define-syntax (fetch-random-number stx)
   (syntax-parse stx
-    [(fetch-random-number obj:expr path:str) #'(fetch-number obj #:select 'random path)]))
+    [(fetch-random-number obj:expr path:expr) #'(fetch-number obj #:select 'random path)]))
 
 
 (define-syntax (fetch-boolean stx)
   (syntax-parse stx
-    [(fetch-boolean obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str)
+    [(fetch-boolean obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(let ([result (send obj fetch #:select pos path)]
              [->bool (lambda (s)
                        (cond [(string? s) (member (string-downcase s) '("true" "t" "1" "yes" "y"))]
@@ -191,14 +191,14 @@
 
 (define-syntax (fetch-first-boolean stx)
   (syntax-parse stx
-    [(fetch-first-boolean obj:expr path:str) #'(fetch-boolean obj #:select 0 path)]))
+    [(fetch-first-boolean obj:expr path:expr) #'(fetch-boolean obj #:select 0 path)]))
 
 (define-syntax (fetch-ith-boolean stx)
   (syntax-parse stx
-    [(fetch-ith-boolean obj:expr i:exact-nonnegative-integer path:str)
+    [(fetch-ith-boolean obj:expr i:exact-nonnegative-integer path:expr)
      #'(fetch-boolean obj #:select i path)]))
 
 (define-syntax (fetch-random-boolean stx)
   (syntax-parse stx
-    [(fetch-random-boolean obj:expr path:str) #'(fetch-boolean obj #:select 'random path)]))
+    [(fetch-random-boolean obj:expr path:expr) #'(fetch-boolean obj #:select 'random path)]))
 
