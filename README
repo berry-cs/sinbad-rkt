@@ -18,10 +18,9 @@ FAA live feed of airport status information:
     (require sinbad)
 
     (define faa
-      (sail-to (string-append "http://services.faa.gov/airport/status/ATL")
-	       (format "xml")
-	       (param "format" "application/xml")
+      (sail-to (string-append "http://services.faa.gov/airport/status/ATL?format=application/xml")
 	       (cache-timeout 300)  ; refresh every 5 minutes
+	       (manifest)           ; display schema for available data upon load
 	       (load)))
 
     (define-struct port (name loc condition delay?))
@@ -41,14 +40,14 @@ The following program connects to the USGS live feed of earthquake
 events:
 
     (require sinbad)
+    
     (define Q
       (sail-to "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
-               (cache-timeout 180)
-               (load)
-               (manifest)))
+               (cache-timeout 180)))
 
     (define-struct quake (place time mag))
 
+    (load Q)   ; can (re)load on demand anytime
     (fetch Q (make-quake "place" "time" "mag") (base-path "features/properties"))    
     (fetch-first Q "features/properties")
 
