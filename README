@@ -9,8 +9,8 @@ http://berry-cs.github.io/sinbad
 
 
 
-Example
--------
+Example 1
+---------
 
 Consider the following program, which connects to the
 FAA live feed of airport status information:
@@ -32,4 +32,26 @@ FAA live feed of airport status information:
 Running this program should produce a value like:
 
     (make-port "Hartsfield-Jackson Atlanta International" "Georgia" "Fair" #false)
+
+
+Example 2
+---------
+
+The following program connects to the USGS live feed of earthquake
+events:
+
+    (require sinbad)
+    (define Q
+      (sail-to "http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
+               (cache-timeout 180)
+               (load)
+               (manifest)))
+
+    (define-struct quake (place time mag))
+
+    (fetch Q (make-quake "place" "time" "mag") (base-path "features/properties"))    
+    (fetch-first Q "features/properties")
+
+Note that the first fetch produces a list of instances of a *user-defined* quake structure. The second form produces an association list.
+
 

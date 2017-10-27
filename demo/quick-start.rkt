@@ -4,7 +4,6 @@
 
 (require sinbad)
 
-
 (define ds-kiva
   (sail-to "http://api.kivaws.org/v1/loans/newest.json"))
 (load ds-kiva)
@@ -193,6 +192,14 @@ exploring
 
 ; note the URL filled in with path param
 
+
+
+
+"---------------------------------------- BINDING TO STRUCTURES "
+
+(define-struct loan (person use amt ctry))
+
+(fetch-random kiva-ds (make-loan "name" "use" "loan_amount" "location/country") (base-path "loans"))
 
 
 

@@ -19,7 +19,12 @@
 ; full-featured fetch API
 (define data
   (fetch* Q `(path "features" "properties"
-                   (,make-quake "title"
+                   (,make-quake "place"
                                 (,quake-ts->timestr "time")
                                 "mag"))))
 
+; with keyword arguments
+(fetch* Q `(path "properties"
+                   (,make-quake "place"
+                                (,quake-ts->timestr "time")
+                                "mag")) #:base-path "features" #:select 'random)
