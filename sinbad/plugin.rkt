@@ -478,6 +478,11 @@ based on whether the path name contains .csv or .tsv).
 
 
 (define (csv->jsexpr csv-acc fp)
+  ;(define byts (port->bytes fp))
+  ;(close-input-port fp)
+  ;(with-input-from-bytes byts
+  ;  (lambda ()
+  ;    (define fp (current-input-port))
   (define field-syms (and (csv-access-field-names csv-acc)
                           (fix-headers (csv-access-field-names csv-acc))))
   (define skip-rows (or (csv-access-skip-rows csv-acc) 0))
@@ -495,10 +500,10 @@ based on whether the path name contains .csv or .tsv).
   ;(display headers)(newline)
 
   ;(hasheq 'data
-          (for/list ([row rows])
-            (for/hasheq ([cell row]
-                         [key  headers])
-              (values key (string->num/bool/try cell)))))
+  (for/list ([row rows])
+    (for/hasheq ([cell row]
+                 [key  headers])
+      (values key (string->num/bool/try cell)))))
 
 
 (define (replace-slash+trim s)

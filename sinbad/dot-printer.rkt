@@ -1,7 +1,8 @@
 #lang racket
 
 (provide dot-printer
-         stop-dot-printer)
+         stop-dot-printer
+         dot-printer-enabled)
 
 (define dot-printer-enabled (make-parameter #t (lambda (v) (equal? v #t))))
 

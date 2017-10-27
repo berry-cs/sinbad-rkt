@@ -17,16 +17,19 @@
 (define (smells-like-url? p)
   ;;     Currently, only things that start off http://
   ;;     https:// or ftp:// are treated as URLs.
-  (and (string-contains? p "://")
+  (and (string? p)
+       (string-contains? p "://")
        (or (string-prefix? p "http")
            (string-prefix? p "ftp"))))
 
 
 (define (smells-like-gzip? p)
-  (string-contains? p ".gz"))
+  (and (string? p)
+       (string-contains? p ".gz")))
 
 (define (smells-like-zip? p)
-  (string-contains? p ".zip"))
+  (and (string? p)
+       (string-contains? p ".zip")))
 
 
 

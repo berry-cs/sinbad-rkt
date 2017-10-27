@@ -22,7 +22,8 @@
          connect
          connect-using
          NEVER-CACHE
-         NEVER-RELOAD)
+         NEVER-RELOAD
+         dot-printer-enabled)
 
 
 (define *debug* #f)
@@ -264,7 +265,7 @@
          this]))
 
 
-    (define (handle-zip fp full-path local-name)
+    (define/public (handle-zip fp full-path local-name)
       (cond
         [(or (smells-like-zip? full-path)
              (and local-name (smells-like-zip? local-name)))
@@ -279,6 +280,7 @@
          (define fe-value (hash-ref option-settings 'file-entry #f))
          (define fe-subtag (format "file-entry:~a" fe-value))
          ;(printf "fe-value: ~a~n" fe-value)
+         (printf "tags: ~a ~a~n" full-path fe-subtag)
          
          (cond
            [(and fe-value (zip-directory-contains? zdir fe-value))
@@ -293,8 +295,13 @@
                 (lambda (tmp-entry-path)
                   (call-with-input-file tmp-entry-path	 	 	 	 
                     (lambda (tfp)
-                      (add-to-cache cacher full-path fe-subtag tfp)
-                      (create-input (resolve-cache-path cacher full-path fe-subtag))))))])]
+                      (cond [(= (cacher-expiration cacher) NEVER-CACHE)
+                             ; don't attempt to cache unzipped file if caching disabled
+                             (open-input-bytes (port->bytes tfp))]
+                            [else  (add-to-cache cacher full-path fe-subtag tfp)
+                                   (create-input (resolve-cache-path cacher
+                                                                     full-path
+                                                                     fe-subtag))])))))])]
             
            [else   ; no fe-value or invalid fe-value
             (sinbad-error (format "Specify a file-entry from the ZIP file: ~a" members))])]
