@@ -1,7 +1,7 @@
 #lang racket
 
 (require racket/date
-         "main.rkt")
+         sinbad)
 
 (define-struct quake (title time mag) #:transparent)
 

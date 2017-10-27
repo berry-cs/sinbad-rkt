@@ -2,8 +2,8 @@
 
 (require file/md5
          json
-         "dot-printer.rkt"
-         "util.rkt")
+         sinbad/dot-printer
+         sinbad/util)
 
 (module+ test
   (require rackunit))

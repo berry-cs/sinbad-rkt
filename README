@@ -1,0 +1,35 @@
+Sinbad - (Automated Structure Inference and Binding of Data)
+============================================================
+
+Sinbad is a software library that makes it very easy to
+uniformly access online data sources provided in standard
+formats (CSV, JSON, XML). For more info, please visit:
+
+http://berry-cs.github.io/sinbad
+
+
+
+Example
+-------
+
+Consider the following program, which connects to the
+FAA live feed of airport status information:
+
+    (require sinbad)
+
+    (define-struct port (name loc condition delay?))
+
+    (define faa
+      (sail-to (string-append "http://services.faa.gov/airport/status/ATL")
+	       (format "xml")
+	       (param "format" "application/xml")
+	       (cache-timeout 300)  ; refresh every 5 minutes
+	       (load)))
+
+    (fetch faa (make-port "Name" "State" "Weather/Weather" "Delay"))
+
+
+Running this program should produce a value like:
+
+    (make-port "Hartsfield-Jackson Atlanta International" "Georgia" "Fair" #false)
+

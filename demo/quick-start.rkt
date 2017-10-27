@@ -170,8 +170,11 @@ exploring
 
 "EXPORT SPEC ----------------------------------------------------------------------"
 
+#;
 (export kiva-ds/p "~/Desktop/spec.txt")
 ; only works if file doesn't already exist
+
+
 
 "QUERY vs PATH ----------------------------------------------------------------------"
 

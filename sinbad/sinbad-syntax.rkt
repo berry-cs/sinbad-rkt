@@ -1,11 +1,12 @@
 #lang racket
 
-(provide sail-to)
-(provide (all-from-out "data-source.rkt"))
 
+(require sinbad/data-source)
 (require (for-syntax syntax/parse))
 
-(require "data-source.rkt")
+
+(provide sail-to)
+(provide (all-from-out sinbad/data-source))
 
 
 ; stx:expr stx:(listof clauses) stx:expr -> (values stx:string stx:(list expr) stx:expr/#f stx:expr/#f stx:expr/#f)

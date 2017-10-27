@@ -1,5 +1,8 @@
 #lang racket
 
+;; THIS CODE IS PROOF-OF-CONCEPT AND NEEDS TO BE RE-ORGANIZED AND DOCUMENTED PROPERLY
+
+
 (provide (all-defined-out))
 
 #|
@@ -42,7 +45,7 @@ based on whether the path name contains .csv or .tsv).
 
 (require racket/generic)
 
-(require "dot-printer.rkt")
+(require sinbad/dot-printer)
 
 (define-generics data-infer
   (matched-by? data-infer path)
@@ -263,19 +266,19 @@ based on whether the path name contains .csv or .tsv).
                         v))])
                 (cond
                   [(empty? prior-seed)   ; root element
-                   content-seed]
+                   (string->num/bool/try content-seed)]
 
                   [(void? prior-seed)    ; empty element - content should be #f
                    (make-hash `((,tag . "")))]
                 
                   [(false? prior-seed)   ; element with no significant content, or what? ... not sure
-                   (make-hash `((,tag . ,content-seed)))]
+                   (make-hash `((,tag . ,(string->num/bool/try content-seed))))]
                 
                   [(dict? prior-seed)
-                   (dict-extend/listify prior-seed tag content-seed)]
+                   (dict-extend/listify prior-seed tag (string->num/bool/try content-seed))]
                 
                   [(string? prior-seed)
-                   (make-hash `((*content* . ,prior-seed) (,tag . ,content-seed)))]
+                   (make-hash `((*content* . ,(string->num/bool/try prior-seed)) (,tag . ,content-seed)))]
                 
                   [else (error "bad")]))
 
@@ -495,8 +498,7 @@ based on whether the path name contains .csv or .tsv).
           (for/list ([row rows])
             (for/hasheq ([cell row]
                          [key  headers])
-              (define as-num (string->number cell))
-              (values key (or as-num (string->boolean/try cell))))))
+              (values key (string->num/bool/try cell)))))
 
 
 (define (replace-slash+trim s)
@@ -514,12 +516,20 @@ based on whether the path name contains .csv or .tsv).
     (string->symbol s3)))
 
 
+(define (string->num/bool/try s)
+  (cond
+    [(string? s)
+     (define as-num (string->number s))
+     (or as-num (string->boolean/try s))]
+    [else s]))
+
+
 ;; string -> boolean or string
 (define (string->boolean/try s)
   (cond
          [(not (string? s)) s]
-         [(member (string-downcase s) '("true" "yes")) #t]
-         [(member (string-downcase s) '("false" "no")) #f]
+         [(string=? (string-downcase s) "true") #t]
+         [(string=? (string-downcase s) "false") #f]
          [else s]))
 
 

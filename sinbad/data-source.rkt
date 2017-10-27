@@ -1,14 +1,16 @@
 #lang racket
 
+;; THIS CODE IS PROOF-OF-CONCEPT AND NEEDS TO BE RE-ORGANIZED AND DOCUMENTED PROPERLY
+
 
 (require net/uri-codec
          file/unzip
          racket/random
          (only-in json jsexpr->bytes jsexpr->string))
-(require "cacher.rkt"
-         "dot-printer.rkt"
-         "plugin.rkt"
-         "util.rkt")
+(require sinbad/cacher
+         sinbad/dot-printer
+         sinbad/plugin
+         sinbad/util)
 
 (module+ test
   (require rackunit))
@@ -430,7 +432,7 @@
 
          (define final-sig
            (apply build-sig (not select) func base-path-fields field-paths-split))
-         (printf "final-sig: ~s~n" final-sig)
+         (dprintf "final-sig: ~s~n" final-sig)
          (real-unify (fetch-all) final-sig select #f)])))
 
 

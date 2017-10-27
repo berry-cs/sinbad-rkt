@@ -1,9 +1,11 @@
 #lang racket
 
-(require "sinbad-syntax.rkt")
+(require sinbad/sinbad-syntax
+         sinbad/extras)
 (require (for-syntax syntax/parse))
 
-(provide (all-from-out "sinbad-syntax.rkt"))
+(provide (all-from-out sinbad/sinbad-syntax))
+(provide (all-from-out sinbad/extras))
 
 (provide load
          manifest
@@ -12,6 +14,7 @@
          cache-directory
          clear-entire-cache
          export
+         fetch*
          fetch
          fetch-ith
          fetch-first
@@ -83,22 +86,40 @@
       (lambda (p1 p2) (string<=? (car p1) (car p2))))]
     [else data]))
 
+(define (unwrap-if-single data)
+  (cond
+    [(and (list? data) (= 1 (length data))) (first data)]
+    [else data]))
+
+
+; direct full-featured fetch
+(define-syntax (fetch* stx)
+  (syntax-parse stx
+    [(fetch* obj:expr rest ...) #'(send obj fetch rest ...)]))
+
 
 (define-syntax (fetch stx)
   (syntax-parse stx
+    [(fetch s:str stuff ...)
+     (raise-syntax-error 'fetch "first parameter should be a data-source" #'s)]
+    
     [(fetch obj:expr)
-     #`(hash->assoc (send obj fetch))]
+     #`(unwrap-if-single (hash->assoc (send obj fetch)))]
     
     [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str)
-     #`(hash->assoc (send obj fetch #:select pos path))]
+     #`(unwrap-if-single (hash->assoc (send obj fetch #:select pos path)))]
     
     [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:str paths:str ... (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply list path paths ...)])  ; constructs a list of lists
-         (hash->assoc result))]
+         (unwrap-if-single (hash->assoc result)))]
+
+    [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) ((~literal assoc) path:str paths:str ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
+     #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply 'dict path paths ...)])  ; build dictionary (assoc list) of data
+         (unwrap-if-single (hash->assoc result)))]
     
     [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) (proc:id path:str paths:str ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
      #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply proc path paths ...)])  ; apply an explicit function
-         (hash->assoc result))]))
+         (unwrap-if-single result))]))
 
 
 (define-syntax (fetch-random stx)
