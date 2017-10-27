@@ -136,14 +136,14 @@
 (define-syntax (fetch-random stx)
   (syntax-parse stx
     [(fetch-random obj:expr)
-     #`(hash->assoc (send obj fetch #:select 'random))]
+     #`(unwrap-if-single (hash->assoc (send obj fetch #:select 'random)))]
     [(fetch-random obj:expr rest ...)
      #'(fetch obj #:select 'random rest ...)]))
 
 (define-syntax (fetch-ith stx)
   (syntax-parse stx
     [(fetch-ith obj:expr i:exact-nonnegative-integer)
-     #`(hash->assoc (send obj fetch #:select i))]
+     #`(unwrap-if-single (hash->assoc (send obj fetch #:select i)))]
     [(fetch-ith obj:expr i:exact-nonnegative-integer rest ...)
      #'(fetch obj #:select i rest ...)]))
 
