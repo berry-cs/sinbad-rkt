@@ -341,12 +341,10 @@
             (format "sample:~a-~a_~a" fe-value max-elts (or random-seed "x"))
             (format "sample:~a_~a" max-elts (or random-seed "x"))))
 
-      (define D (box #f))
       (define the-cust (make-custodian))
 
       (dynamic-wind
-       (lambda ()
-         (set-box! D (dot-printer (format "Sampling data (this may take a moment)"))))
+       (lambda () (void))
    
        (lambda ()    ; try:
          (parameterize ([current-custodian the-cust])
@@ -368,7 +366,7 @@
               (when loaded?
                 ;(printf "the-data: ~a~n" (substring (format "~a" the-data) 0 (min 1000 (string-length (format "~a" the-data)))))
                 (define sampled-data (sample-data the-data max-elts random-seed))
-                ;(printf "sampled-data: ~a~n" (substring (format "~a" sampled-data) 0 (min 1000 (string-length (format "~a" sampled-data)))))
+                ;(printf "sampled-data: ~a~n" (substring (format "~a" sampled-data) 0 (min 100000 (string-length (format "~a" sampled-data)))))
                 (define fp (open-input-bytes (jsexpr->bytes sampled-data)))
                 (add-to-cache cacher full-path subtag fp)
                 (set! the-data sampled-data)
@@ -381,7 +379,6 @@
            ))
 
          (lambda ()     ; finally:
-           (when (unbox D) (stop-dot-printer (unbox D)))
            (custodian-shutdown-all the-cust)
            ))
        
@@ -742,7 +739,7 @@ sig :=    (list <sig>)
 
     
         [(? string? p)
-         ;(printf "contents of ~a at ~a~n" p (list->string (take (string->list (format "~a" data)) 1000)))
+         (dprintf "contents of ~a at ~a~n" p   (substring (format "~a" data) 0 (min 1000 (string-length (format "~a" data)))))
          (define result
            (match data
              [(or (? string? _) (? boolean? _) (? number? _)) data]
@@ -750,7 +747,9 @@ sig :=    (list <sig>)
                             (if select (apply-select r select) r))]
              [(? list? _) (real-unify (apply-select data select) sig upd-select as-list?)]
              [else (sinbad-error "not primitive data")]))
-         result]))
+         result]
+
+        [_ (sinbad-error "unexpected error (invalid sig)")]))
 
 
     ;; dict  string  ->  any

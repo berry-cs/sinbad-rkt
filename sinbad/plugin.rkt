@@ -211,7 +211,7 @@ based on whether the path name contains .csv or .tsv).
     (random-seed seed))   ; only seed the at the top-level recursive call
 
   (cond
-    [(dict? obj)
+    [(hash? obj)   ; can't be dict? because that might think a list of lists is an assoc and hence a dict
      (for/hasheq ([(k v) (in-dict obj)])
        (values k (sample-data v max-elts)))]
      ;(dict-map obj (lambda (k v) (sample-data v max-elts)))]
