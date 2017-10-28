@@ -9,11 +9,15 @@ http://berry-cs.github.io/sinbad
 
 
 
+(Each of the examples below is intended to be run in 
+Intermediate Student language level. In #lang racket
+define the structures #:transparent to inspect results.)
+
 Example 1
 ---------
 
 Consider the following program, which connects to the
-FAA live feed of airport status information:
+FAA live feed of airport status information (XML format):
 
     (require sinbad)
 
@@ -37,7 +41,7 @@ Example 2
 ---------
 
 The following program connects to the USGS live feed of earthquake
-events:
+events (JSON format):
 
     (require sinbad)
     
@@ -54,3 +58,28 @@ events:
 Note that the first fetch produces a list of instances of a *user-defined* quake structure. The second form produces an association list.
 
 
+Example 3
+---------
+
+An example of a very large data set (CSV + zip format):
+
+````
+(require sinbad)
+
+(define vehicle-data-source
+  (sail-to "http://www.fueleconomy.gov/feg/epadata/vehicles.csv.zip"
+           (load) (manifest)))
+
+(define-struct auto (make model year trans city-mpg hwy-mpg))
+
+;; pull a random data record...
+(fetch-random vehicle-data-source
+              (make-auto "make" "model" "year" "trany" "city08" "highway08"))
+
+;; get all ~40,000 (!) of them...
+(define all-vehicles
+  (fetch vehicle-data-source
+         (make-auto "make" "model" "year" "trany" "city08" "highway08")))
+
+(length all-vehicles) 
+````
