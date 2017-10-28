@@ -109,7 +109,7 @@
 ; direct full-featured fetch
 (define-syntax (fetch* stx)
   (syntax-parse stx
-    [(fetch* obj:expr rest ...) #'(send obj fetch rest ...)]))
+    [(fetch* obj:expr rest ...) #'(unwrap-if-single (hash->assoc (send obj fetch rest ...)))]))
 
 
 (define-syntax (fetch stx)
