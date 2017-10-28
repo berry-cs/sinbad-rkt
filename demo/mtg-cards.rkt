@@ -14,12 +14,41 @@
        (field-list D)))
 
 
-(define data*/SCG
-  (fetch* D #:base-path "SCG"
-          `(dict (name "name")
-                 (cards ((path "cards"
-                               (dict (cardname "name")
-                                     (type "type")
-                                     (colors "colors"))))))))
+;; A Set is (make-set String String [Listof Card]
+(define-struct set (code name cards))
+
+;; A Card is (make-card String String [Listof String])
+(define-struct card (name type colors))
+
+
+;; use the full-featured version of fetch* to construct more complex data
+(define data*
+  (map (lambda (k)
+         (fetch* D `(path ,k (,make-set "code"
+                                        "name"
+                                        ((path "cards"
+                                               (,make-card "name"
+                                                           "type"
+                                                           "colors")))))))
+       (field-list D)))
+
+;; how many cards total?
+(length (apply append (map set-cards data*)))    ; 34,000+ !
+
+
+
+; using built-in assoc lists instead of structures
+(define data*/dict   
+  (map (lambda (k)
+         (fetch* D `(path ,k (dict (name "name")
+                                   (code "code")
+                                   (cards ((path "cards"
+                                                 (dict (cardname "name")
+                                                       (type "type")
+                                                       (colors "colors")))))))))
+       (field-list D)))
+
+
+
 
 
