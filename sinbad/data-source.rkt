@@ -128,6 +128,8 @@
     (define the-data #f)
     (define sampled?     #f)   ; whether the-data is a sample of the actual data
 
+    (define ignore-error-fields '())   ; list of fields for which to not report warning messages
+    (define invalid-fields-reported (make-parameter '()))  ; used to control printout of warning messages
     
     ; all the following hash tables assume *symbols* as the key
     
@@ -440,7 +442,8 @@
          (define final-sig
            (apply build-sig (not select) func base-path-fields field-paths-split))
          (dprintf "final-sig: ~s~n" final-sig)
-         (real-unify (fetch-all) final-sig select #f)])))
+         (parameterize ([invalid-fields-reported (map string->symbol ignore-error-fields)])
+           (real-unify (fetch-all) final-sig select #f))])))
 
 
     
@@ -555,9 +558,20 @@
             e)))
     
     (define/public (set-option! name value)
+      (define (no-slash? s) (not (string-contains? s "/")))
+      
       (match (string-downcase name)
         ["file-entry"
          (set! option-settings (hash-set option-settings 'file-entry value))]
+        ["ignore-missing"
+         (cond
+           ; given as a list of strings
+           [(and (list? value) (andmap string? value) (andmap no-slash? value))
+            (set! ignore-error-fields (append value ignore-error-fields))]
+           [(and (string? value) (no-slash? value))
+            (set! ignore-error-fields (cons value ignore-error-fields))]
+           [else
+            (sinbad-error "ignore-missing option value should be a string or list of strings without / in them")])]
         [else
          (da-set-option! data-factory name value)])
       this)
@@ -652,11 +666,9 @@ sig :=    (list <sig>)
      |    <path-string>
 |#
 
-    ;; unify : jsexpr sig [integer? or #f or 'random or (list integer? ...)]  -> (list any)
-    ;(define (unify data sig [select #f] [as-list #f])
-    ;  (real-unify data sig select as-list))
+    ;; real-unify : jsexpr sig [integer? or #f or 'random or (list integer? ...)] boolean -> (list any)
 
-    (define (real-unify data sig select as-list)
+    (define (real-unify data sig select as-list?)
       (define upd-select   ; "use-up" the select index
         (match select
           [(list x) #f]
@@ -669,11 +681,11 @@ sig :=    (list <sig>)
          (dprintf "apply ~a to:\n~a\n" (object-name f) ss)
          (match data
            [(list ds ...)
-            (if as-list
-                (flatten (map (λ(d) (real-unify d sig select as-list)) ds))
-                (real-unify (apply-select ds select) sig upd-select as-list))]
+            (if as-list?
+                (flatten (map (λ(d) (real-unify d sig select as-list?)) ds))
+                (real-unify (apply-select ds select) sig upd-select as-list?))]
            [(? dict? _)
-            (define p-unif (map (λ (s) (real-unify data s select as-list)) ss))
+            (define p-unif (map (λ (s) (real-unify data s select as-list?)) ss))
             (apply f p-unif) ])]
 
     
@@ -681,19 +693,17 @@ sig :=    (list <sig>)
          (dprintf "dict of ~a~n" ss)
          (match data
            [(list ds ...)
-            (if as-list
-                (flatten (map (λ(d) (real-unify d sig select as-list)) ds))
-                (real-unify (apply-select ds select) sig upd-select as-list))]
+            (if as-list?
+                (flatten (map (λ(d) (real-unify d sig select as-list?)) ds))
+                (real-unify (apply-select ds select) sig upd-select as-list?))]
            [(? dict? _)
             (define assocs (map (λ(sub)
                                   (define-values (n s)
                                     (match sub
                                       [(list n s) (values n s)]
                                       [(? string? s) (values s s)]))
-                                  (cons (cond
-                                          [(symbol? n) n]
-                                          [(string? n) (string->symbol n)])
-                                        (real-unify data s select as-list)))
+                                  (cons (if (symbol? n) n (string->symbol n))
+                                        (real-unify data s select as-list?)))
                                 ss))
             (make-hasheq assocs)])]
 
@@ -703,15 +713,15 @@ sig :=    (list <sig>)
 
          (define (traverse data path)
            (match data
-             [(? dict? _) (dict-ref data (if (symbol? p) p (string->symbol p)))]
+             [(? dict? _) (dict-ref/check data p)]
              [(? list? _) (flatten (map (λ(d) (traverse d path)) data))]
              [else (sinbad-error (format "no path to ~a ~a" p ps))]))
 
          (define p-data (traverse data p))
        
          (if (cons? ps)
-             (real-unify p-data (append (cons 'path ps) (list s)) select as-list)
-             (real-unify p-data s select as-list))]
+             (real-unify p-data (append (cons 'path ps) (list s)) select as-list?)
+             (real-unify p-data s select as-list?))]
 
 
         [(list 'value v) v]
@@ -736,12 +746,28 @@ sig :=    (list <sig>)
          (define result
            (match data
              [(or (? string? _) (? boolean? _) (? number? _)) data]
-             [(? dict? _) (let ([r (dict-ref data (string->symbol p))])
+             [(? dict? _) (let ([r (dict-ref/check data p)])
                             (if select (apply-select r select) r))]
-             [(? list? _) (real-unify (apply-select data select) sig upd-select as-list)]
+             [(? list? _) (real-unify (apply-select data select) sig upd-select as-list?)]
              [else (sinbad-error "not primitive data")]))
          result]))
-    
+
+
+    ;; dict  string  ->  any
+    ;; this does a dict-ref, but if the key is not in the data,
+    ;; then it prints out a warning and produces #f, unless the
+    ;; key is already in the (invalid-fields-reported) parameter
+    ;; in which case no warning message is printed, and just #f
+    ;; is returned
+    (define (dict-ref/check data s-key)
+      (define key (if (symbol? s-key) s-key (string->symbol s-key)))
+      (cond
+        [(dict-has-key? data key) (dict-ref data key)]
+        [else
+         (unless (member key (invalid-fields-reported))
+           (fprintf (current-error-port) "warning: missing data for ~a~n" s-key)
+           (invalid-fields-reported (cons key (invalid-fields-reported))))
+         #f]))
 
     
     ))
