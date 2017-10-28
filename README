@@ -22,7 +22,7 @@ FAA live feed of airport status information (XML format):
     (require sinbad)
 
     (define faa
-      (sail-to (string-append "http://services.faa.gov/airport/status/ATL?format=application/xml")
+      (sail-to "http://services.faa.gov/airport/status/ATL?format=application/xml"
 	       (cache-timeout 300)  ; refresh every 5 minutes
 	       (manifest)           ; display schema for available data upon load
 	       (load)))
@@ -63,23 +63,25 @@ Example 3
 
 An example of a very large data set (CSV + zip format):
 
-````
-(require sinbad)
+    (require sinbad)
 
-(define vehicle-data-source
-  (sail-to "http://www.fueleconomy.gov/feg/epadata/vehicles.csv.zip"
-           (load) (manifest)))
+    (define vehicle-data-source
+      (sail-to "http://www.fueleconomy.gov/feg/epadata/vehicles.csv.zip"
+       (load) (manifest)))
 
-(define-struct auto (make model year trans city-mpg hwy-mpg))
+    (define-struct auto (make model year trans city-mpg hwy-mpg))
 
-;; pull a random data record...
-(fetch-random vehicle-data-source
-              (make-auto "make" "model" "year" "trany" "city08" "highway08"))
+    ;; pull a random data record...
+    (fetch-random vehicle-data-source
+          (make-auto "make" "model" "year" "trany" "city08" "highway08"))
 
-;; get all ~40,000 (!) of them...
-(define all-vehicles
-  (fetch vehicle-data-source
-         (make-auto "make" "model" "year" "trany" "city08" "highway08")))
+    ;; get all ~40,000 (!) of them...
+    (define all-vehicles
+      (fetch vehicle-data-source
+    	 (make-auto "make" "model" "year" "trany" "city08" "highway08")))
 
-(length all-vehicles) 
-````
+    (length all-vehicles) 
+
+
+Have fun!
+
