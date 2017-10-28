@@ -739,13 +739,15 @@ sig :=    (list <sig>)
 
     
         [(? string? p)
-         (dprintf "contents of ~a at ~a~n" p   (substring (format "~a" data) 0 (min 1000 (string-length (format "~a" data)))))
+         (dprintf "contents of ~a at ~a~n" p   (substring (format "~a" data) 0 (min 40 (string-length (format "~a" data)))))
          (define result
            (match data
              [(or (? string? _) (? boolean? _) (? number? _)) data]
              [(? dict? _) (let ([r (dict-ref/check data p)])
                             (if select (apply-select r select) r))]
-             [(? list? _) (real-unify (apply-select data select) sig upd-select as-list?)]
+             [(? list? _) (if select
+                              (real-unify (apply-select data select) sig upd-select as-list?)
+                              (map (λ (d) (real-unify d sig select as-list?)) data))]
              [else (sinbad-error "not primitive data")]))
          result]
 
