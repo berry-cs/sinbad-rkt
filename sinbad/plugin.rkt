@@ -255,15 +255,24 @@ based on whether the path name contains .csv or .tsv).
             FINISH-ELEMENT
             (lambda (elem-gi attributes namespaces prior-seed content-seed)
               (define tag (if (symbol? elem-gi) elem-gi (res-name->sxml elem-gi)))
-              ;(printf "finish: ~a ~a ~a ~a ~a~n" tag attributes namespaces prior-seed content-seed)
+              ;(printf "finish: ~a ~s ~a ~a ~a~n" tag attributes namespaces prior-seed content-seed)
 
               (let ([content-seed
                      (for/fold ([result content-seed])
                                ([(k v) (in-dict attributes)])
-                       (dict-extend/listify
-                        result
-                        (string->symbol (string-append "@" (symbol->string k)))
-                        v))])
+                       (cond
+                         [(symbol? k)
+                          (dict-extend/listify
+                           result
+                           (string-append "@" (symbol->string k))
+                           v)]
+                         [(cons? k)
+                          (define kj (string-append "@"
+                                                    (symbol->string (car k))
+                                                    "-"
+                                                    (symbol->string (cdr k))))
+                          (dict-extend/listify result kj v)]
+                         [else result]))])
                 (cond
                   [(empty? prior-seed)   ; root element
                    (string->num/bool/try content-seed)]
@@ -297,7 +306,7 @@ based on whether the path name contains .csv or .tsv).
                       (or (false? seed) (dict? seed))) seed]
                 [(false? seed) str]
                 [(string? seed) (string-append seed str)]
-                [(dict? seed)  (dict-extend/listify seed '*content* (string-trim str))]))
+                [(dict? seed)  (dict-extend/listify seed "*content*" (string-trim str))]))
 
             ;; not really used...
             DOCTYPE
@@ -319,18 +328,23 @@ based on whether the path name contains .csv or .tsv).
     result))
 
 
+;; dict? [string or symbol] any -> dict
+;; key is always converted to symbol ultimately before adding to the dict
 (define (dict-extend/listify dict key value)
-  (cond
-    [(string? dict) (dict-extend/listify (make-hash `((*content* . ,dict))) key value)]
-    [(not (dict-has-key? dict key))
-     (hash-set! dict key value)]
-    [(list? (dict-ref dict key))
-     (define val-list (dict-ref dict key))
-     (hash-set! dict key (append val-list (list value)))]
-    [else
-     (define existing-val (dict-ref dict key))
-     (hash-set! dict key (list existing-val value))])
-  dict)
+  (let ([key (string->symbol
+              (string-replace (if (symbol? key) (symbol->string key) key)
+                             "/" "-"))])
+    (cond
+      [(string? dict) (dict-extend/listify (make-hash `((*content* . ,dict))) key value)]
+      [(not (dict-has-key? dict key))
+       (hash-set! dict key value)]
+      [(list? (dict-ref dict key))
+       (define val-list (dict-ref dict key))
+       (hash-set! dict key (append val-list (list value)))]
+      [else
+       (define existing-val (dict-ref dict key))
+       (hash-set! dict key (list existing-val value))])
+    dict))
 
 (define (h->l x)
     (if (hash? x)
