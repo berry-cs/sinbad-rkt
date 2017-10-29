@@ -177,8 +177,11 @@
      (raise-syntax-error 'fetch-number "first parameter should be a data-source" #'s)]
     [(fetch-number obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(let ([result (send obj fetch #:select pos path)]
-             [->number (lambda (s) (if (string? s) (or (string->number (string-trim s)) 0) 0))])
-         (if (list? result) (map ->number result) (->number result)))]))
+             [->number (lambda (s) (cond
+                                     [(number? s) s]
+                                     [(string? s) (or (string->number (string-trim s)) 0)]
+                                     [else 0]))])
+         (unwrap-if-single (if (list? result) (map ->number result) (->number result))))]))
 
 (define-syntax (fetch-first-number stx)
   (syntax-parse stx
@@ -201,10 +204,12 @@
     [(fetch-boolean obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(let ([result (send obj fetch #:select pos path)]
              [->bool (lambda (s)
-                       (cond [(string? s) (member (string-downcase s) '("true" "t" "1" "yes" "y"))]
+                       (cond [(string? s) (if (member (string-downcase s) '("true" "t" "1" "yes" "y"))
+                                               #t
+                                               #f)]
                              [(number? s) (not (zero? s))]
-                             [else s]))])
-         (if (list? result) (map ->bool result) (->bool result)))]))
+                             [else #f]))])
+         (unwrap-if-single (if (list? result) (map ->bool result) (->bool result))))]))
 
 (define-syntax (fetch-first-boolean stx)
   (syntax-parse stx
