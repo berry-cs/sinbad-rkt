@@ -3,6 +3,7 @@
 (require sinbad/sinbad-syntax
          sinbad/extras)
 (require (for-syntax syntax/parse))
+(require lang/prim)
 
 (provide (all-from-out sinbad/sinbad-syntax))
 (provide (all-from-out sinbad/extras))
@@ -125,7 +126,7 @@
          (unwrap-if-single (hash->assoc result)))]
     
     [(fetch obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) (proc:id path:expr paths:expr ...) (~optional ((~datum base-path) bp) #:defaults ([bp #'#f])))
-     #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply proc path paths ...)])  ; apply an explicit function
+     #`(let ([result (send obj fetch #:base-path bp #:select pos #:apply (first-order->higher-order proc) path paths ...)])  ; apply an explicit function
          (unwrap-if-single result))]
 
     ;; this case comes after the two above because otherwise it is matched first
