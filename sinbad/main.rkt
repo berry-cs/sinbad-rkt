@@ -144,6 +144,8 @@
 
 (define-syntax (fetch-random stx)
   (syntax-parse stx
+    [(fetch-random s:str stuff ...)
+     (raise-syntax-error 'fetch-random "first parameter should be a data-source" #'s)]
     [(fetch-random obj:expr)
      #`(unwrap-if-single (hash->assoc (send obj fetch #:select 'random)))]
     [(fetch-random obj:expr rest ...)
@@ -151,6 +153,8 @@
 
 (define-syntax (fetch-ith stx)
   (syntax-parse stx
+    [(fetch-ith s:str stuff ...)
+     (raise-syntax-error 'fetch-ith "first parameter should be a data-source" #'s)]
     [(fetch-ith obj:expr i:exact-nonnegative-integer)
      #`(unwrap-if-single (hash->assoc (send obj fetch #:select i)))]
     [(fetch-ith obj:expr i:exact-nonnegative-integer rest ...)
@@ -169,7 +173,9 @@
 
 (define-syntax (fetch-number stx)
   (syntax-parse stx
-    [(fetch-float obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
+    [(fetch-number s:str stuff ...)
+     (raise-syntax-error 'fetch-number "first parameter should be a data-source" #'s)]
+    [(fetch-number obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(let ([result (send obj fetch #:select pos path)]
              [->number (lambda (s) (if (string? s) (or (string->number (string-trim s)) 0) 0))])
          (if (list? result) (map ->number result) (->number result)))]))
@@ -190,6 +196,8 @@
 
 (define-syntax (fetch-boolean stx)
   (syntax-parse stx
+    [(fetch-boolean s:str stuff ...)
+     (raise-syntax-error 'fetch-boolean "first parameter should be a data-source" #'s)]
     [(fetch-boolean obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(let ([result (send obj fetch #:select pos path)]
              [->bool (lambda (s)
