@@ -225,3 +225,14 @@
   (syntax-parse stx
     [(fetch-random-boolean obj:expr path:expr) #'(fetch-boolean obj #:select 'random path)]))
 
+
+
+
+
+;; Adjust printing in *SL
+
+(define my-ph
+  (let ([ph (current-print)])
+   (λ (value) (if (is-a? value data-source%) (display value) (ph value)))))
+
+(current-print my-ph)
