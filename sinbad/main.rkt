@@ -1,12 +1,13 @@
 #lang racket
 
-(require sinbad/sinbad-syntax
-         sinbad/extras)
+(require sinbad/sinbad-syntax)
+(provide (all-from-out sinbad/sinbad-syntax))
+
+; (require sinbad/extras)   ; don't automatically provide this
+; (provide (all-from-out sinbad/extras))
+
 (require (for-syntax syntax/parse))
 (require lang/prim)
-
-(provide (all-from-out sinbad/sinbad-syntax))
-(provide (all-from-out sinbad/extras))
 
 (provide load
          manifest
