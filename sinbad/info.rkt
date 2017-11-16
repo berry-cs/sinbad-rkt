@@ -8,6 +8,8 @@
 (define primary-file "main.rkt")
 
 (define deps '("base"
+               "net-lib"
+               "htdp-lib"
                "csv-reading"
                "sxml"
                "srfi-lite-lib"))
