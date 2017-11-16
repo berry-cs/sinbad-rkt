@@ -1,5 +1,8 @@
 #lang racket
 
+(module+ test
+  (require rackunit))
+
 (require racket/date)
 
 (provide current-seconds
@@ -10,7 +13,8 @@
 
 
 (provide string-upcase
-         string-downcase)
+         string-downcase
+         string-position)
 
 (provide degrees->radians
          gc-dist/km
@@ -91,3 +95,24 @@
 
 (define (km->miles k)
   (* k .621371))
+
+
+
+
+
+
+(define (string-position needle haystack [start-pos 0])
+  (define ps (regexp-match-positions needle haystack start-pos))
+  (and ps (car (first ps))))
+
+
+
+
+(module+ test
+  (check-eq? (string-position "bye" "hello") #f)
+  (check-eq? (string-position "el" "hello") 1)
+  (check-eq? (string-position "el" "helloyellow") 1)
+  (check-eq? (string-position "el" "helloyellow" 2) 6)
+  (check-eq? (string-position "el" "helloyellow" 6) 6)
+  (check-eq? (string-position "el" "helloyellow" 7) #f))
+
