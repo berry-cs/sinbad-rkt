@@ -335,6 +335,7 @@ based on whether the path name contains .csv or .tsv).
               (string-replace (if (symbol? key) (symbol->string key) key)
                              "/" "-"))])
     (cond
+      [(false? dict) (dict-extend/listify (make-hash) key value)]
       [(string? dict) (dict-extend/listify (make-hash `((*content* . ,dict))) key value)]
       [(not (dict-has-key? dict key))
        (hash-set! dict key value)]
