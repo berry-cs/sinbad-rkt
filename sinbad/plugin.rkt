@@ -234,12 +234,15 @@ based on whether the path name contains .csv or .tsv).
          (only-in srfi/1 cons*))
 
 (define res-name->sxml
+  (lambda (res-name) (cdr res-name)))   ; ignore away namespace prefixes - the (car ...) part
+;; TODO: make this an option setting somewhere...
+  #;  
   (lambda (res-name)
     (string->symbol
      (string-append
       (symbol->string (car res-name))
       ":"
-      (symbol->string (cdr res-name))))))
+      (symbol->string (cdr res-name)))))
 
 
 (define (ssax:xml->jsexpr port)
