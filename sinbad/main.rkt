@@ -24,11 +24,11 @@
          fetch-second
          fetch-third
          fetch-random
-         fetch-number
+         fetch-numbers
          fetch-first-number
          fetch-ith-number
          fetch-random-number
-         fetch-boolean
+         fetch-booleans
          fetch-first-boolean
          fetch-ith-boolean
          fetch-random-boolean)
@@ -173,11 +173,11 @@
 
 
 
-(define-syntax (fetch-number stx)
+(define-syntax (fetch-numbers stx)
   (syntax-parse stx
-    [(fetch-number s:str stuff ...)
-     (raise-syntax-error 'fetch-number "first parameter should be a data-source" #'s)]
-    [(fetch-number obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
+    [(fetch-numbers s:str stuff ...)
+     (raise-syntax-error 'fetch-numbers "first parameter should be a data-source" #'s)]
+    [(fetch-numbers obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(let ([result (send obj fetch #:select pos path)]
              [->number (lambda (s) (cond
                                      [(number? s) s]
@@ -187,23 +187,23 @@
 
 (define-syntax (fetch-first-number stx)
   (syntax-parse stx
-    [(fetch-first-number obj:expr path:expr) #'(fetch-number obj #:select 0 path)]))
+    [(fetch-first-number obj:expr path:expr) #'(fetch-numbers obj #:select 0 path)]))
 
 (define-syntax (fetch-ith-number stx)
   (syntax-parse stx
     [(fetch-ith-number obj:expr i:exact-nonnegative-integer path:expr)
-     #'(fetch-number obj #:select i path)]))
+     #'(fetch-numbers obj #:select i path)]))
 
 (define-syntax (fetch-random-number stx)
   (syntax-parse stx
-    [(fetch-random-number obj:expr path:expr) #'(fetch-number obj #:select 'random path)]))
+    [(fetch-random-number obj:expr path:expr) #'(fetch-numbers obj #:select 'random path)]))
 
 
-(define-syntax (fetch-boolean stx)
+(define-syntax (fetch-booleans stx)
   (syntax-parse stx
-    [(fetch-boolean s:str stuff ...)
-     (raise-syntax-error 'fetch-boolean "first parameter should be a data-source" #'s)]
-    [(fetch-boolean obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
+    [(fetch-booleans s:str stuff ...)
+     (raise-syntax-error 'fetch-booleans "first parameter should be a data-source" #'s)]
+    [(fetch-booleans obj:expr (~optional (~seq #:select pos) #:defaults ([pos #'#f])) path:expr)
      #`(let ([result (send obj fetch #:select pos path)]
              [->bool (lambda (s)
                        (cond [(string? s) (if (member (string-downcase s) '("true" "t" "1" "yes" "y"))
@@ -215,16 +215,16 @@
 
 (define-syntax (fetch-first-boolean stx)
   (syntax-parse stx
-    [(fetch-first-boolean obj:expr path:expr) #'(fetch-boolean obj #:select 0 path)]))
+    [(fetch-first-boolean obj:expr path:expr) #'(fetch-booleans obj #:select 0 path)]))
 
 (define-syntax (fetch-ith-boolean stx)
   (syntax-parse stx
     [(fetch-ith-boolean obj:expr i:exact-nonnegative-integer path:expr)
-     #'(fetch-boolean obj #:select i path)]))
+     #'(fetch-booleans obj #:select i path)]))
 
 (define-syntax (fetch-random-boolean stx)
   (syntax-parse stx
-    [(fetch-random-boolean obj:expr path:expr) #'(fetch-boolean obj #:select 'random path)]))
+    [(fetch-random-boolean obj:expr path:expr) #'(fetch-booleans obj #:select 'random path)]))
 
 
 
