@@ -24,6 +24,8 @@
          fetch-second
          fetch-third
          fetch-random
+         (rename-out [fetch-first-number fetch-number]
+                     [fetch-first-boolean fetch-boolean])
          fetch-numbers
          fetch-first-number
          fetch-ith-number

@@ -683,7 +683,8 @@ sig :=    (list <sig>)
                 (real-unify (apply-select ds select) sig upd-select as-list?))]
            [(? dict? _)
             (define p-unif (map (λ (s) (real-unify data s select as-list?)) ss))
-            (apply f p-unif) ])]
+            (apply f p-unif) ]
+           [(? false? _) #f])]
 
     
         [(list 'dict ss ...)
@@ -702,7 +703,8 @@ sig :=    (list <sig>)
                                   (cons (if (symbol? n) n (string->symbol n))
                                         (real-unify data s select as-list?)))
                                 ss))
-            (make-hasheq assocs)])]
+            (make-hasheq assocs)]
+           [(? false? _) #f])]
 
     
         [(list 'path p ps ... s)
@@ -712,7 +714,11 @@ sig :=    (list <sig>)
            (match data
              [(? dict? _) (dict-ref/check data p)]
              [(? list? _) (flatten (map (λ(d) (traverse d path)) data))]
-             [else (sinbad-error (format "no path to ~a ~a" p ps))]))
+             [else
+              (unless (member p (invalid-fields-reported))
+                (fprintf (current-error-port) "warning: no path to ~a ~a~n" p ps)
+                (invalid-fields-reported (cons p (invalid-fields-reported))))
+              #f]))
 
          (define p-data (traverse data p))
        

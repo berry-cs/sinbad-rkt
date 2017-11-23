@@ -14,14 +14,27 @@
 
 (provide string-upcase
          string-downcase
-         string-position)
+         string-position
+         string-replace)
 
 (provide degrees->radians
          gc-dist/km
          gc-dist/miles)
 
+(provide open-browser-to
+         open-browser-to/result)
+
 (require net/sendurl)
-(provide (rename-out (send-url open-browser-to)))
+
+(define (open-browser-to url)
+  (send-url url)
+  url)
+
+(define (open-browser-to/result url result)
+  (send-url url)
+  result)
+
+ ; (rename-out (send-url open-browser-to)))
 
 
 
