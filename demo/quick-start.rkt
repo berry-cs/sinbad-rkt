@@ -128,11 +128,13 @@ exploring
 
 "SAMPLING ----------------------------------------------------------------------"
 
+#;
 (define ks/samp
   (sail-to "https://s3.amazonaws.com/weruns/forfun/Kickstarter/Kickstarter_2015-10-22T09_57_48_703Z.json.gz"
            (sample 100 42)
            ;(fresh-sample 100 42)
            (manifest)))
+#;
 (fetch-first ks/samp "data/projects/name")
 
 
