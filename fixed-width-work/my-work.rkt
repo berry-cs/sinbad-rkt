@@ -6,17 +6,22 @@
 
 (require 2htdp/batch-io)
 
-(define DROP-PERCENT 0)  ; number of lines to drop before & after data
 
-(define COMPLETE-LINES (read-lines "est16-ga.txt"))
-;(define COMPLETE-LINES (read-lines "cedata.txt"))
-;(define COMPLETE-LINES (read-lines "exh4s.txt"))
-;(define COMPLETE-LINES (read-lines "cols-header.txt"))
+(module+ test
+  (check-expect (filter-blank (list "  " "   fa   " "afeji" "\t   \t" "gg"))
+                (list "   fa   " "afeji" "gg")))
+
+(define (filter-blank a-los)
+  (filter (λ(s) (not (regexp-match-exact? #px"\\s*" s))) a-los))
+
+
+(define COMPLETE-LINES (filter-blank (read-lines "est16-ga.txt")))
+;(define COMPLETE-LINES (filter-blank (read-lines "cedata.txt")))
+;(define COMPLETE-LINES (filter-blank (read-lines "exh4s.txt")))
+;(define COMPLETE-LINES (filter-blank (read-lines "cols-header.txt")))
 
 (define SAMPLE-LINES (take COMPLETE-LINES (min 100 (length COMPLETE-LINES))))
-(define LINES-TO-DROP (inexact->exact (floor (* DROP-PERCENT (length SAMPLE-LINES)))))
-(define LINES (take (drop SAMPLE-LINES LINES-TO-DROP)
-                    (- (length SAMPLE-LINES) (* 2 LINES-TO-DROP))))
+(define LINES SAMPLE-LINES)
 
 
 (define (extend-to str desired-length)
@@ -39,22 +44,6 @@
     (line->e-vector (string-append " " (extend-to line max-line-length)))))
 
 (define (fluff-e-matrix mtx)
-  
-
-  #;
-  (for ([row mtx])
-    (define line (e-vector->line row))
-    (define sentence-groups (regexp-match-positions*
-                             #px"\\s{2,}((\\S+\\s){2,}\\S+)\\s{2,}"
-                             line #:match-select cadr))
-    (for ([gp sentence-groups])
-      (define start (car gp))
-      (define end (cdr gp))
-      (for ([i (in-range start end)])
-        (when (get (sub1 row) i))
-        
-        (vector-set! row i 3))))
-  
   (for ([row-index (vector-length mtx)])
     (define row (vector-ref mtx row-index))
     (for ([col-index (vector-length row)])
@@ -72,47 +61,7 @@
   mtx)
 
 
-#|
-  00
-  01
-   0
-or
-  0-
-  01
-  1-
-or
-  1-
-  01
-  0-
-|#
-(define (inter-phrase-space mtx r c)
-  (define (get i j)
-    (vector-ref (vector-ref mtx i) j))
-  
-  (and (not (zero? (get r (sub1 c))))
-       (zero? (get r c))
-       (not (zero? (get r (add1 c))))
-       #;(not (or (and (zero? (get (sub1 r) c)) (zero? (get (sub1 r) (add1 c))))
-                (and (zero? (get (sub1 r) c)) (zero? (get (sub1 r) (sub1 c))))
-                (and (zero? (get (add1 r) c)) (zero? (get (add1 r) (add1 c))))
-                (and (zero? (get (add1 r) c)) (zero? (get (add1 r) (sub1 c))))))
-
-       (not (and (= (get r (sub1 c)) (get (add1 r) (sub1 c)) (get (sub1 r) (sub1 c)))
-                 (= (get r c) (get (add1 r) c) (get (sub1 r) c))))
-       
-       (or (not (and (= (get r c) (get (add1 r) c) (get (sub1 r) c))))
-           (and (zero? (get (sub1 r) (add1 c))) (zero? (get (add1 r) (add1 c)))))))
-
-           
-
-(define (smallest-non-zero-nbr mtx r c)
-  (define (get i j)
-    (vector-ref (vector-ref mtx i) j))
-  (apply min (filter (compose not zero?)
-                     (list (get (sub1 r) c)
-                           (get (add1 r) c)
-                           (get r (sub1 c))
-                           (get r (add1 c))))))
+        
 
 (define (count-one-nbrs mtx r c)
   (define (get i j)
@@ -143,6 +92,7 @@ or
                                      [_ "blue"])))))))
 
 
+;; [vector [vector number]] number number -> [vector number]
 (define (matrix-flatten mtx [start-row 0] [num-rows -1])
   (define mtx-select (if (< num-rows 0)
                          (vector-drop mtx start-row)
@@ -154,8 +104,7 @@ or
     ([row mtx-select])
      (if (not result)
          row
-         (for/vector ([a result] [b row])
-           (+ a b))))
+         (vector-map + result row)))
    '()))
 
 
@@ -387,7 +336,11 @@ or
 
 (define FLATTENS
   (append 
-   (for/list ([n LINES-LENGTH]) (matrix-flatten LINES-E-MATRIX+FLUFF n))
+   (for/list ([n LINES-LENGTH])
+     (matrix-flatten LINES-E-MATRIX+FLUFF n (if (< n LINES-LENGTH/5)
+                                                (- LINES-LENGTH (* 2 n))
+                                                (- LINES-LENGTH LINES-LENGTH/5 n))))
+   
    (list (make-vector (vector-length (vector-ref LINES-E-MATRIX+FLUFF 0))))
 
    (for/list ([n LINES-LENGTH])
@@ -412,15 +365,6 @@ or
   (filter (λ(g) (< 1 (length g)))
           (map (lambda (flt) (extract-group-positions (e-vector->line flt))) FLATTENS)))
 
-#;
-(define GROUPS
-    (append (for/list ([n (length LINES)])
-              (extract-group-positions
-               (e-vector->line (matrix-flatten LINES-E-MATRIX+FLUFF n))))
-            (for/list ([n (length LINES)])
-              (extract-group-positions
-               (e-vector->line (matrix-flatten LINES-E-MATRIX+FLUFF 0 n))))))
-
 (define GROUP-COUNTS
   (sort (map length GROUPS) <))
 
@@ -443,5 +387,21 @@ FINAL
 
 (apply-groups FINAL (list-ref COMPLETE-LINES 20))
 
+
+(write-file "output.csv"
+            (string-join 
+             (for/list ([line (take COMPLETE-LINES (min 5000 (length COMPLETE-LINES)))])
+               (string-join (map (λ(s) (string-append "\"" s "\""))
+                                 (cons "extra" (apply-groups FINAL line))) ","))
+             "\n"))
+
+
 (module+ test (test))
+
+
+
+;; TODO: (count-inconsistent-breaks FINAL (list-ref COMPLETE-LINES 20))
+;;  count-inconsistent-breaks: [listof Pair]  string -> number
+
+;; TODO: check on lots of fixed width data examples
 
