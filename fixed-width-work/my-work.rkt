@@ -312,88 +312,77 @@
 
 
 
-(define LINES-E-MATRIX+FLUFF (fluff-e-matrix (lines->e-matrix LINES)))
-
-(matrix->bitmap (lines->e-matrix LINES))
-"^ no fluff"
-(matrix->bitmap LINES-E-MATRIX+FLUFF)
-"^ fluff"
-
-"x"
-
-#|
-(define TOP-DOWN-FLATTENS
-  (for/list ([n (length LINES)]) (matrix-flatten LINES-E-MATRIX+FLUFF n)))
-
-(define BOTTOM-UP-FLATTENS
-  (for/list ([n (length LINES)])
-    (matrix-flatten LINES-E-MATRIX+FLUFF (- (length LINES) n))))
-|#
-
-(define LINES-LENGTH (length LINES))
-(define LINES-LENGTH/2 (floor (/ LINES-LENGTH 2)))
-(define LINES-LENGTH/5 (floor (/ LINES-LENGTH 5)))  
-
-(define FLATTENS
-  (append 
-   (for/list ([n LINES-LENGTH])
-     (matrix-flatten LINES-E-MATRIX+FLUFF n (if (< n LINES-LENGTH/5)
-                                                (- LINES-LENGTH (* 2 n))
-                                                (- LINES-LENGTH LINES-LENGTH/5 n))))
-   
-   (list (make-vector (vector-length (vector-ref LINES-E-MATRIX+FLUFF 0))))
-
-   (for/list ([n LINES-LENGTH])
-     (matrix-flatten LINES-E-MATRIX+FLUFF (min n LINES-LENGTH/5) (max (- LINES-LENGTH n) 0)))
-   (list (make-vector (vector-length (vector-ref LINES-E-MATRIX+FLUFF 0))))
-   
-   (for/list ([n LINES-LENGTH/2]) (matrix-flatten LINES-E-MATRIX+FLUFF n LINES-LENGTH/2))
-   (list (make-vector (vector-length (vector-ref LINES-E-MATRIX+FLUFF 0))))
-   
-   ))
+(struct fwf (e-mtx flat-mtx all-groups maj-groups final-groups))
 
 
-;(append TOP-DOWN-FLATTENS (list (make-vector (vector-length (first TOP-DOWN-FLATTENS)))) BOTTOM-UP-FLATTENS)
+(define (parse-fixed-width lines)
+  (define e-mtx (fluff-e-matrix (lines->e-matrix lines)))
+  (define lines-length (length lines))
+  (define ll/2 (floor (/ lines-length 2)))
+  (define ll/5 (floor (/ lines-length 5)))
+
+  (define flat-mtx
+    (append 
+     (for/list ([n lines-length]) (matrix-flatten e-mtx n (max (- lines-length (* 2 n))
+                                                               (- lines-length ll/5 n))))
+     (for/list ([n lines-length]) (matrix-flatten e-mtx (min n ll/5) (max (- lines-length n) 0)))
+     (for/list ([n ll/2]) (matrix-flatten e-mtx n ll/2))))
+
+  (define all-groups (filter (λ(g) (< 1 (length g)))
+                             (map (lambda (flt) (extract-group-positions (e-vector->line flt))) flat-mtx)))
+
+  (define all-group-counts (sort (map length all-groups) <))
+  (define majority-count (car
+                          (argmax cdr (build-list (add1 (apply max all-group-counts))
+                                                  (λ(i) (cons i (length (filter (λ(n) (= n i))
+                                                                                all-group-counts))))))))
+  (define majority-groups (remove-spurious (filter (λ(g) (= (length g) majority-count)) all-groups)))
+
+  (define final-groups (check&merge-groups (union-groups majority-groups) lines))
+
+  (fwf e-mtx flat-mtx all-groups majority-groups final-groups))
 
 
-(for/fold ([img (square 0 "solid" "white")])
-          ([flt FLATTENS])
-  (above img (matrix->bitmap (list flt))))
 
-
-(define GROUPS
-  (filter (λ(g) (< 1 (length g)))
-          (map (lambda (flt) (extract-group-positions (e-vector->line flt))) FLATTENS)))
-
-(define GROUP-COUNTS
-  (sort (map length GROUPS) <))
-
-(define MAJORITY-COUNT
-  (car (argmax cdr
-               (build-list (add1 (apply max GROUP-COUNTS))
-                           (λ(i) (cons i (length (filter (λ(n) (= n i)) GROUP-COUNTS))))))))
-
-;(define MAJORITY-COUNT (majority-element GROUP-COUNTS))
-
-(define MAJ-GROUPS
-  (remove-spurious (filter (λ(g) (= (length g) MAJORITY-COUNT)) GROUPS)))
-
-(define UNIONED-MAJ (union-groups MAJ-GROUPS))
-UNIONED-MAJ
-
-(apply-groups UNIONED-MAJ (list-ref COMPLETE-LINES 20))
-(define FINAL (check&merge-groups UNIONED-MAJ SAMPLE-LINES))
-FINAL
-
-(apply-groups FINAL (list-ref COMPLETE-LINES 20))
-
-
-(write-file "output.csv"
+(define (write-csv output-file-name fwf-parse data-lines)
+  (write-file output-file-name
             (string-join 
-             (for/list ([line (take COMPLETE-LINES (min 5000 (length COMPLETE-LINES)))])
+             (for/list ([line (take data-lines (min 5000 (length data-lines)))])
                (string-join (map (λ(s) (string-append "\"" s "\""))
-                                 (cons "extra" (apply-groups FINAL line))) ","))
-             "\n"))
+                                 (cons "-" (apply-groups (fwf-final-groups fwf-parse) line))) ","))
+             "\n")))
+
+
+(define (run-on-file input-file-name)
+  (define DATA-1 (filter-blank (read-lines input-file-name)))
+  (define SAMPLE-1 (take DATA-1 (min 100 (length DATA-1))))
+  (define PARSE-1 (parse-fixed-width SAMPLE-1))
+
+  #|
+    (matrix->bitmap (lines->e-matrix SAMPLE-1))
+    "^ no fluff"
+    (matrix->bitmap (fwf-e-mtx PARSE-1))
+    "^ fluff"
+    (for/fold ([img (square 0 "solid" "white")])
+              ([flt (fwf-flat-mtx PARSE-1)])
+      (above img (matrix->bitmap (list flt))))
+  |#
+  
+  (fwf-final-groups PARSE-1)
+  (apply-groups (fwf-final-groups PARSE-1) (list-ref DATA-1 20))
+  (write-csv "output.csv" PARSE-1 DATA-1)
+  PARSE-1)
+
+
+(define R1 (run-on-file "est16-ga.txt"))
+(define R2 (run-on-file "ssamatab2.txt"))
+
+(module+ test
+  (check-expect (length (fwf-final-groups R1)) 27)
+  (check-expect (length (fwf-final-groups R2)) 10))
+
+
+
 
 
 (module+ test (test))
