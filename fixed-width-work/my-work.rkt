@@ -5,6 +5,8 @@
 
 
 (require 2htdp/batch-io)
+(require (only-in 2htdp/image
+                  beside above square))
 
 
 (module+ test
@@ -13,15 +15,6 @@
 
 (define (filter-blank a-los)
   (filter (λ(s) (not (regexp-match-exact? #px"\\s*" s))) a-los))
-
-
-(define COMPLETE-LINES (filter-blank (read-lines "est16-ga.txt")))
-;(define COMPLETE-LINES (filter-blank (read-lines "cedata.txt")))
-;(define COMPLETE-LINES (filter-blank (read-lines "exh4s.txt")))
-;(define COMPLETE-LINES (filter-blank (read-lines "cols-header.txt")))
-
-(define SAMPLE-LINES (take COMPLETE-LINES (min 100 (length COMPLETE-LINES))))
-(define LINES SAMPLE-LINES)
 
 
 (define (extend-to str desired-length)
@@ -47,19 +40,15 @@
   (for ([row-index (vector-length mtx)])
     (define row (vector-ref mtx row-index))
     (for ([col-index (vector-length row)])
-      ;(displayln `(check ,row-index ,col-index))
       (define cell (vector-ref row col-index))
       (when (and (zero? cell)
                  (< 0 row-index (sub1 (vector-length mtx)))
                  (< 0 col-index (sub1 (vector-length row))))
         (when (<= 3 (count-one-nbrs mtx row-index col-index))
           (vector-set! row col-index 2))
-        ;(when (inter-phrase-space mtx row-index col-index)
-        ;  (vector-set! row col-index 3))
-        )))
-                     ;(add1 (smallest-non-zero-nbr mtx row-index col-index))))
-  mtx)
 
+        )))
+  mtx)
 
         
 
@@ -74,8 +63,6 @@
                     (get r (add1 c))))))
 
 
-(require (only-in 2htdp/image
-                  beside above square))
 
 (define (matrix->bitmap mtx)
     (for/fold ([img (square 0 "solid" "white")])
@@ -112,30 +99,6 @@
 (define (extract-group-positions line)
   (regexp-match-positions* #px"\\S+" line))
 
-(define (majority-candidate seq)
-  (define-values (result count)
-    (for/fold ([maj-elt (first seq)]
-               [maj-count 1])
-              ([elt (rest seq)])
-      (cond
-        [(= elt maj-elt) (values maj-elt (add1 maj-count))]
-        [(= maj-count 1) (values elt 1)]
-        [else (values maj-elt (sub1 maj-count))])))
-  result)
-
-(define (check-majority-candidate seq val)
-  (> (for/sum ([elt seq]) (if (= elt val) 1 0))
-     (/ (sequence-length seq) 2)))
-
-(define (majority-element seq)
-  (define candidate (majority-candidate seq))
-  (and (check-majority-candidate seq candidate)
-       candidate))
-
-
-(module+ test
-  (check-expect (majority-element '(2 3 3 4 5 3 3 3 7 3 5)) 3)
-  (check-expect (majority-element '(2 3 3 4 5 3 8 4 7 3 5)) #f))
 
 
 (module+ test
