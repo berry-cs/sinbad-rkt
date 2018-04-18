@@ -130,7 +130,6 @@
 
     (define ignore-error-fields '())   ; list of fields for which to not report warning messages
     (define invalid-fields-reported (make-parameter '()))  ; used to control printout of warning messages
-    (define invalid-fields-exception? (make-parameter false))   ; for has-fields?
     
     ; all the following hash tables assume *symbols* as the key
     
@@ -449,9 +448,8 @@
       (unless (has-data?) (sinbad-error "no data available - make sure you called (load)"))
       
       (with-handlers ([exn:fail? (λ (e) #f)])
-        (parameterize ([invalid-fields-exception? true])
-          (send/apply this fetch #:base-path base-path field-paths)
-          #t)))
+        (send/apply this fetch #:base-path base-path field-paths)
+        #t))
 
 
     (define/public (field-list [base-path #f])
@@ -718,17 +716,15 @@ sig :=    (list <sig>)
              [(? list? _) (flatten (map (λ(d) (traverse d path)) data))]
              [else
               (unless (member p (invalid-fields-reported))
-                (if (invalid-fields-exception?)
-                    (error "warning: no path to ~a ~a~n" p ps)
-                    (fprintf (current-error-port) "warning: no path to ~a ~a~n" p ps))
+                (fprintf (current-error-port) "warning: no path to ~a ~a~n" p ps)
                 (invalid-fields-reported (cons p (invalid-fields-reported))))
               #f]))
 
          (define p-data (traverse data p))
-
-         (cond [(false? p-data) #f]
-               [(cons? ps) (real-unify p-data (append (cons 'path ps) (list s)) select as-list?)]
-               [else (real-unify p-data s select as-list?)])]
+       
+         (if (cons? ps)
+             (real-unify p-data (append (cons 'path ps) (list s)) select as-list?)
+             (real-unify p-data s select as-list?))]
 
 
         [(list 'value v) v]
@@ -776,9 +772,7 @@ sig :=    (list <sig>)
         [(dict-has-key? data key) (dict-ref data key)]
         [else
          (unless (member key (invalid-fields-reported))
-           (if (invalid-fields-exception?)
-               (error "warning: missing data for ~a~n" s-key)
-               (fprintf (current-error-port) "warning: missing data for ~a~n" s-key))
+           (fprintf (current-error-port) "warning: missing data for ~a~n" s-key)
            (invalid-fields-reported (cons key (invalid-fields-reported))))
          #f]))
 
