@@ -64,7 +64,9 @@
   (syntax-parse stx
     [(data-length obj:expr (~optional base-path #:defaults ([base-path #'#f])))
      #`(let ([data (send obj fetch #:base-path base-path)])
-         (if (list? data) (length data) 0))]))
+         (cond [(false? data) 0]
+               [(list? data) (length data)]
+               [else 1]))]))
 
 
 (define-syntax (has-fields? stx)
