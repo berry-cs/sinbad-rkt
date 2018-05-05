@@ -6,7 +6,7 @@
 
 (require 2htdp/batch-io)
 (require (only-in 2htdp/image
-                  beside above square))
+                  beside above square save-image))
 
 
 (module+ test
@@ -64,7 +64,7 @@
 
 
 
-(define (matrix->bitmap mtx)
+(define (matrix->bitmap mtx [dot-size 5])
     (for/fold ([img (square 0 "solid" "white")])
               ([row mtx])
       (above
@@ -72,11 +72,11 @@
        (for/fold ([row-img (square 0 "solid" "white")])
                  ([cell row])
          (beside row-img
-                 (square 5 "solid" (match cell
+                 (square dot-size "solid" (match cell
                                      [0 "white"]
                                      [1 "black"]
                                      [2 "darkslategray"]
-                                     [_ "blue"])))))))
+                                     [_ "darkgray"])))))))
 
 
 ;; [vector [vector number]] number number -> [vector number]
