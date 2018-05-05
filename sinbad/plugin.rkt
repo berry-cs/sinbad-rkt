@@ -339,16 +339,18 @@ based on whether the path name contains .csv or .tsv).
                              "/" "-"))])
     (cond
       [(false? dict) (dict-extend/listify (make-hash) key value)]
-      [(string? dict) (dict-extend/listify (make-hash `((*content* . ,dict))) key value)]
+      [(or (string? dict) (number? dict)) (dict-extend/listify (make-hash `((*content* . ,dict))) key value)]
       [(not (dict-has-key? dict key))
-       (hash-set! dict key value)]
+       (hash-set! dict key value)
+       dict]
       [(list? (dict-ref dict key))
        (define val-list (dict-ref dict key))
-       (hash-set! dict key (append val-list (list value)))]
+       (hash-set! dict key (append val-list (list value)))
+       dict]
       [else
        (define existing-val (dict-ref dict key))
-       (hash-set! dict key (list existing-val value))])
-    dict))
+       (hash-set! dict key (list existing-val value))
+       dict])))
 
 (define (h->l x)
     (if (hash? x)
