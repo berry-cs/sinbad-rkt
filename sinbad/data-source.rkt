@@ -725,7 +725,11 @@ sig :=    (list <sig>)
               #f]))
 
          (define p-data (traverse data p))
+<<<<<<< HEAD
        
+=======
+
+>>>>>>> fixed-width
          (cond [(false? p-data) #f]
                [(cons? ps) (real-unify p-data (append (cons 'path ps) (list s)) select as-list?)]
                [else (real-unify p-data s select as-list?)])]
