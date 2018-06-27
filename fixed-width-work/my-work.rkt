@@ -3,6 +3,8 @@
 (module+ test
   (require test-engine/racket-tests))
 
+(provide run-on-file
+         (struct-out fwf))
 
 (require 2htdp/batch-io)
 (require (only-in 2htdp/image
@@ -148,8 +150,8 @@
 
 (define (apply-group group line)
   (substring line
-             (min (sub1 (car group)) (string-length line))
-             (min (sub1 (cdr group)) (string-length line))) )
+             (min (car group) (string-length line))
+             (min (cdr group) (string-length line))) )
 
 (define (apply-groups groups-list line)
   (for/list ([group groups-list]) (apply-group group line)))
@@ -275,7 +277,7 @@
 
 
 
-(struct fwf (e-mtx flat-mtx all-groups maj-groups final-groups))
+(struct fwf (e-mtx flat-mtx all-groups maj-groups final-groups data-frame))
 
 
 (define (parse-fixed-width lines)
@@ -285,14 +287,16 @@
   (define ll/5 (floor (/ lines-length 5)))
 
   (define flat-mtx
-    (append 
+    (append  
      (for/list ([n lines-length]) (matrix-flatten e-mtx n (max (- lines-length (* 2 n))
                                                                (- lines-length ll/5 n))))
      (for/list ([n lines-length]) (matrix-flatten e-mtx (min n ll/5) (max (- lines-length n) 0)))
      (for/list ([n ll/2]) (matrix-flatten e-mtx n ll/2))))
 
-  (define all-groups (filter (λ(g) (< 1 (length g)))
-                             (map (lambda (flt) (extract-group-positions (e-vector->line flt))) flat-mtx)))
+  (define all-groups (map decrement-all-values
+                          (filter (λ(g) (< 1 (length g)))
+                                  (map (lambda (flt) (extract-group-positions (e-vector->line flt)))
+                                       flat-mtx))))
 
   (define all-group-counts (sort (map length all-groups) <))
   (define majority-count (car
@@ -303,21 +307,69 @@
 
   (define final-groups (check&merge-groups (union-groups majority-groups) lines))
 
-  (fwf e-mtx flat-mtx all-groups majority-groups final-groups))
+  (fwf e-mtx flat-mtx all-groups majority-groups final-groups #f))
+
+
+
+(module+ test
+  (check-expect (count-inconsistent-breaks '((0 . 3) (4 . 7) (8 . 13)) "abc def hijkl") 0)
+  (check-expect (count-inconsistent-breaks '((0 . 3) (3 . 7) (7 . 13)) "abc def hijkl") 0)
+  (check-expect (count-inconsistent-breaks '((0 . 3) (2 . 12) (7 . 13)) "abc def hijkl") 1)
+  (check-expect (count-inconsistent-breaks '((0 . 2) (3 . 9) (7 . 13)) "abc def hijkl") 2 ))
+
+(define (count-inconsistent-breaks groups txt)
+  (for/sum ([pair groups])
+    (if (and (space-at/before? (car pair) txt)
+             (space-at/before? (cdr pair) txt))
+        0 1)))
+
+
+(module+ test
+  (check-expect (space-at/before? 7 "abcde  fg") #t)
+  (check-expect (space-at/before? 6 "abcde  fg") #t)
+  (check-expect (space-at/before? 5 "abcde  fg") #t)
+  (check-expect (space-at/before? 0 "abcde  fg") #t)  ; start/end string counts as space
+  (check-expect (space-at/before? 9 "abcde  fg") #t)
+  (check-expect (space-at/before? 53 "abcde  fg") #f) ; out of range
+  (check-expect (space-at/before? 1 "abcde  fg") #f)
+  (check-expect (space-at/before? 4 "abcde  fg") #f)
+  (check-expect (space-at/before? 8 "abcde  fg") #f))
+
+(define (space-at/before? pos txt)
+  (and (<= 0 pos (string-length txt))
+       (or (zero? pos)
+           (= pos (string-length txt))
+           (char-whitespace? (string-ref txt pos))
+           (char-whitespace? (string-ref txt (sub1 pos))))))
+
 
 
 
 (define (write-csv output-file-name fwf-parse data-lines)
   (write-file output-file-name
             (string-join 
-             (for/list ([line (take data-lines (min 5000 (length data-lines)))])
+             (for/list ;([line (take data-lines (min 5000 (length data-lines)))])
+                 ([line data-lines])
                (string-join (map (λ(s) (string-append "\"" s "\""))
-                                 (cons "-" (apply-groups (fwf-final-groups fwf-parse) line))) ","))
+                                 ;(cons "-" (apply-groups (fwf-final-groups fwf-parse) line))
+                                 (apply-groups (fwf-final-groups fwf-parse) line)) ","))
              "\n")))
 
 
-(define (run-on-file input-file-name)
-  (define DATA-1 (filter-blank (read-lines input-file-name)))
+(module+ test
+  (check-expect (decrement-all-values '((3 . 4) (7 . 12)))
+                '((2 . 3) (6 . 11))))
+
+(define (decrement-all-values groups)
+  (map (λ(g) (cons (sub1 (car g)) (sub1 (cdr g)))) groups))
+
+
+
+
+(define (run-on-file input-file-name-or-port)
+  (define DATA-1 (filter-blank (if (path-string? input-file-name-or-port)
+                                   (port->lines (open-input-file input-file-name-or-port))
+                                   (port->lines input-file-name-or-port))))
   (define SAMPLE-1 (take DATA-1 (min 100 (length DATA-1))))
   (define PARSE-1 (parse-fixed-width SAMPLE-1))
 
@@ -330,11 +382,19 @@
               ([flt (fwf-flat-mtx PARSE-1)])
       (above img (matrix->bitmap (list flt))))
   |#
+
+  (define CONSISTENT-ONLY
+    (let ([threshold (quotient (length (fwf-final-groups PARSE-1)) 10)])
+      (filter (λ(line) (<= (count-inconsistent-breaks (fwf-final-groups PARSE-1) line) threshold))
+              DATA-1)))
+  (define PARSED-LINES (map (λ(line) (map string-trim (apply-groups (fwf-final-groups PARSE-1) line)))
+                       CONSISTENT-ONLY))
   
-  (fwf-final-groups PARSE-1)
-  (apply-groups (fwf-final-groups PARSE-1) (list-ref DATA-1 20))
-  (write-csv "output.csv" PARSE-1 DATA-1)
-  PARSE-1)
+  ;(fwf-final-groups PARSE-1)
+  ;(apply-groups (fwf-final-groups PARSE-1) (list-ref DATA-1 20))
+  (write-csv "output.csv" PARSE-1 CONSISTENT-ONLY)
+  
+  (struct-copy fwf PARSE-1 [data-frame PARSED-LINES]))
 
 
 (define R1 (run-on-file "est16-ga.txt"))
@@ -344,11 +404,22 @@
   (check-expect (length (fwf-final-groups R1)) 27)
   (check-expect (length (fwf-final-groups R2)) 10))
 
+(define LINES1 (read-lines "est16-ga.txt"))
+(define BREAKS1 (map (λ(line) (count-inconsistent-breaks (fwf-final-groups R1) line)) LINES1))
+(define CONSISTENT-ONLY1
+    (let ([threshold (quotient (length (fwf-final-groups R1)) 10)])
+      (filter (λ(line) (<= (count-inconsistent-breaks (fwf-final-groups R1) line) threshold))
+              LINES1)))
+(define PARSED1 (map (λ(line) (map string-trim (apply-groups (fwf-final-groups R1) line)))
+                     CONSISTENT-ONLY1))
 
-
+(define LINES2 (read-lines "ssamatab2.txt"))
+(define BREAKS2 (map (λ(line) (count-inconsistent-breaks (fwf-final-groups R2) line)) LINES2))
 
 
 (module+ test (test))
+
+
 
 
 

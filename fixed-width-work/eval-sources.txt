@@ -1,0 +1,52 @@
+0 - https://ww2.amstat.org/publications/jse/v2n1/datasets.mcintyre.html
+
+1 - https://www.bls.gov/lau/metrossa.htm
+direct link: https://www.bls.gov/web/metro/ssamatab1.txt
+   pandas: fails because of header rows, succeeds with skiprows
+
+2 - https://www.census.gov/data/datasets/2016/demo/saipe/2016-state-and-county.html
+direct link: https://www2.census.gov/programs-surveys/saipe/datasets/2016/2016-state-and-county/est16-ga.txt
+   pandas good
+
+3 - https://www.census.gov/mp/www/cat/decennial_census_2010/summary_file_1_1.html
+
+4 - https://www.census.gov/foreign-trade/data/index.html
+direct link: https://www.census.gov/foreign-trade/Press-Release/current_press_release/ft900.zip
+   pandas fails: header lines
+     skiprows=7, good, but picks up footer too
+
+5 - http://data.giss.nasa.gov/gistemp/#tabledata
+  Global-mean monthly, seasonal, and annual means, 1880-present, updated through most recent month: TXT
+  pandas - fails, header lines
+
+
+6 - https://www.ncdc.noaa.gov/isd/data-access
+direct link: ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-lite/2018/010010-99999-2018.gz
+  pandas good
+
+7 - https://caaspp.cde.ca.gov/sb2015/ResearchFileList
+    layout: https://caaspp.cde.ca.gov/sb2015/research_fixfileformat.aspx
+   pandas: fails, no spaces between some fields
+
+8 - https://www.data.boem.gov/Main/PacificPipeline.aspx
+   pandas - fails, no spaces between some fields, also some fields run into others
+
+9 - https://archive.org/details/opm-federal-employment-data
+   pandas - fails, no spaces between some fields
+
+10 - http://pds-geosciences.wustl.edu/missions/apollo/index.htm
+   pandas - good
+
+
+
+
+
+XXX actually tab-separated format
+5 - https://www.bls.gov/ces/#data
+    https://download.bls.gov/pub/time.series/ce/
+direct link: https://download.bls.gov/pub/time.series/ce/ce.data.00a.TotalNonfarm.Employment
+   * pandas fails: \t between fields
+     series_id\tyear period\tvalue footnote_codes
+0      CES0000000001     1939\tM01          29923
+
+
