@@ -369,9 +369,18 @@ based on whether the path name contains .csv or .tsv).
 
 (define (xtest str)
   ;(printf "------- Testing: ~a~n" str)
+
+  (define (pair<=? p1 p2)
+    (string<=? (symbol->string (car p1)) (symbol->string (car p2))))
+  
+  (define (sort-pairs v)
+    (cond [(and (list? v) (andmap pair? v))
+           (sort (map sort-pairs v) pair<=?)]
+          [(list? v) (map sort-pairs v)]
+          [else v]))
   
   (let ([result (ssax:xml->jsexpr (open-input-string str))])
-    (h->l result)))
+    (sort-pairs (h->l result))))
 
 ;(xtest "<zippy><pippy pigtails=\"2\">ab duh</pippy>cd hi <no /></zippy>")
 
@@ -389,20 +398,20 @@ based on whether the path name contains .csv or .tsv).
   (check-equal? (xtest "<root><car>Ford</car>hello</root>") `((*content* . "hello") (car . "Ford") ))
   (check-equal? (xtest "<root><car><make>Ford</make><model>Taurus</model></car>
                          <car><make>Honda</make><model>Odyssey</model></car></root>")
-                '((car . (((model . "Taurus") (make . "Ford"))
-                          ((model . "Odyssey") (make . "Honda"))))))
+                '((car . (((make . "Ford") (model . "Taurus") )
+                          ((make . "Honda") (model . "Odyssey") )))))
   (check-equal? (xtest "<root><car year=\"1998\"><make>Ford</make><model>Taurus</model></car>
                          <car year=\"2005\"><make>Honda</make><model>Odyssey</model></car></root>")
-                '((car . (( (model . "Taurus") (make . "Ford") (@year . "1998"))
-                          ( (model . "Odyssey") (make . "Honda") (@year . "2005"))))))
+                '((car . (( (@year . "1998") (make . "Ford") (model . "Taurus")  )
+                          ( (@year . "2005") (make . "Honda") (model . "Odyssey")  )))))
   
   (check-equal? (h->l (dict-extend/listify (make-hash) 'hi "new")) '((hi . "new")))
   (check-equal? (h->l (dict-extend/listify (make-hash '((bye . "old"))) 'hi "new"))
-                '((hi . "new") (bye . "old")))
+                '((bye . "old") (hi . "new")))
   (check-equal? (h->l (dict-extend/listify (make-hash '((hi . "new"))) 'hi "old"))
                 '((hi . ("new" "old"))))
   (check-equal? (h->l (dict-extend/listify (make-hash '((bye . "old") (hi . ("new" "old")))) 'hi "good"))
-                '((hi . ("new" "old" "good")) (bye . "old"))))
+                '((bye . "old") (hi . ("new" "old" "good")))))
 
 
 (define-struct xml-infer ()
