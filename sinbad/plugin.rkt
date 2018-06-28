@@ -517,7 +517,7 @@ based on whether the path name contains .csv or .tsv).
   (for/list ([row rows])
     (for/hasheq ([cell row]
                  [key  headers])
-      (values key (string->num/bool/try cell)))))
+      (values key (string->num/bool/try cell #f)))))
 
 
 ;; : (listof (listof string)) -> (listof string)
@@ -695,7 +695,7 @@ based on whether the path name contains .csv or .tsv).
   (check-expect (string->num/bool/try "25,452,414") 25452414)
   (check-expect (string->num/bool/try "06517") "06517"))
 
-(define (string->num/bool/try s)
+(define (string->num/bool/try s [boolean-too? #t])
   (if (not (string? s))
       s
       (cond
@@ -704,7 +704,9 @@ based on whether the path name contains .csv or .tsv).
         [(regexp-match #px"^0\\d+" s) s]   ; starts with 0 and only digits after that
         [else
          (define as-num (string->number s))
-         (or as-num (string->boolean/try s))])))
+         (or as-num (if boolean-too?
+                        (string->boolean/try s)
+                        s))])))
 
 
 ;; string -> boolean or string

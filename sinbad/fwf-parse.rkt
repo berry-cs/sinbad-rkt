@@ -19,6 +19,33 @@
   (filter (λ(s) (not (regexp-match-exact? #px"\\s*" s))) a-los))
 
 
+(module+ test
+  (check-expect (expand-tabs "hello there") "hello there")
+  (check-expect (expand-tabs "hello\tthere") "hello   there")
+  (check-expect (expand-tabs "Alpine \t\t14.1  .86  .9853  13.6")
+                "Alpine          14.1  .86  .9853  13.6"))
+
+(define (expand-tabs str [tab-pos 8])
+  (let-values ([(str-result str-length)
+                (for/fold ([result '()]
+                           [cur-pos 0])
+                          ([ch (string->list str)])
+                  (cond
+                    [(char=? #\tab ch)
+                     (define spaces-needed
+                       (match (remainder cur-pos tab-pos)
+                         [(? zero?) tab-pos]
+                         [v (- tab-pos v)]))
+                     
+                     (values (append result (make-list spaces-needed #\space))
+                             (+ spaces-needed cur-pos))]
+                    [else
+                     (values (append result (list ch))
+                             (add1 cur-pos))]))])
+    (list->string str-result)))
+
+
+
 (define (extend-to str desired-length)
   (define diff (- desired-length (string-length str)))
   (if (<= diff 0)
@@ -276,7 +303,6 @@
 
 
 
-
 (struct fwf (e-mtx flat-mtx all-groups maj-groups final-groups data-frame))
 
 
@@ -368,11 +394,11 @@
 
 (define (run-on-file input-file-name-or-port [skip-rows 0])
   ;(displayln (list 'inp input-file-name-or-port))
-  (define DATA-1 (filter-blank (drop
+  (define DATA-1 (map expand-tabs (filter-blank (drop
                                 (if (path-string? input-file-name-or-port)
                                     (port->lines (open-input-file input-file-name-or-port))
                                     (port->lines input-file-name-or-port))
-                                skip-rows)))
+                                skip-rows))))
   (define SAMPLE-1 (take DATA-1 (min 100 (length DATA-1))))
   (define PARSE-1 (parse-fixed-width SAMPLE-1))
 
@@ -389,7 +415,7 @@
   |#
 
   (define CONSISTENT-ONLY
-    (let ([threshold (quotient (length (fwf-final-groups PARSE-1)) 10)])
+    (let ([threshold (max 1 (quotient (length (fwf-final-groups PARSE-1)) 10))])
       (filter (λ(line) (<= (count-inconsistent-breaks (fwf-final-groups PARSE-1) line) threshold))
               DATA-1)))
   (define PARSED-LINES (map (λ(line) (map string-trim (apply-groups (fwf-final-groups PARSE-1) line)))
