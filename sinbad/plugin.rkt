@@ -648,6 +648,10 @@ based on whether the path name contains .csv or .tsv).
 
 
 ;; listof-string -> listof-symbol
+;; 1) replaces empty string labels with general "col-###" labels,
+;; 2) adds suffixes to duplicate labels, and
+;; 3) replaces "/"s with "-"s
+;; then converts the labels to symbols
 (module+ test
   (check-expect (fix-headers '("ab/c" "   de" "f" "ghij"))
                 '(ab-c de f ghij))
@@ -656,14 +660,30 @@ based on whether the path name contains .csv or .tsv).
   (check-expect (fix-headers '("" "ab" "cd" "ab"))
                 '(col-0 ab-0 cd ab-1)))
 
+
+(define (digits-in n)
+  (inexact->exact (ceiling (/ (log n) (log 10)))))
+
 (define (fix-headers los)
-  (define max-digs (inexact->exact (ceiling (/ (log (length los)) (log 10)))))
+  (define max-digs (digits-in (length los)))
+  (define labels (make-hash))
+  
   (for/list ([s los]
              [i (in-naturals)])
+    (define occurs# (count (λ(t) (string=? s t)) los)) ; need to see if this label is a duplicate
+    (define suffix (if (> occurs# 1)  ; see if we need to suffix the label
+                       (~a (hash-ref labels s 0) #:width (digits-in occurs#)
+                                #:align 'right #:pad-string "0") ; suffix is how many have previously been seen
+                       #f))
+    (when suffix (hash-set! labels s (add1 (hash-ref labels s 0)))) ; update how many have been previously seen
+    
     (define s2 (replace-slash+trim s))
-    (define s3 (if (string=? "" s2)
-                   (format "col-~a" (~a i #:width max-digs #:align 'right #:pad-string "0"))
-                   s2))
+    (define s3 (cond
+                 [(string=? "" s2)
+                  (format "col-~a" (~a i #:width max-digs #:align 'right #:pad-string "0"))]
+                 [suffix (string-append s2 "-" suffix)]
+                 [else s2]))
+    
     (string->symbol s3)))
 
 
