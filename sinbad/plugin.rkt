@@ -1,9 +1,14 @@
 #lang racket
 
+
+(module+ test
+  (require test-engine/racket-tests))
 ;; THIS CODE IS PROOF-OF-CONCEPT AND NEEDS TO BE RE-ORGANIZED AND DOCUMENTED PROPERLY
 
 
 (provide (all-defined-out))
+
+(require "fwf-parse.rkt")
 
 #|
 Generic interface for plug-in modules
@@ -56,6 +61,8 @@ based on whether the path name contains .csv or .tsv).
   (da-get-option data-access key)
   (da-set-option! data-access key val)
   (da-load-data data-access fp [enc]))
+
+
 
 
 
@@ -418,6 +425,116 @@ based on whether the path name contains .csv or .tsv).
        (ssax:xml->jsexpr fp)))])
 
 
+
+
+
+;; ------  FIXED WIDTH ----------------------------------
+;; ------  FIXED WIDTH ----------------------------------
+;; ------  FIXED WIDTH ----------------------------------
+;; ------  FIXED WIDTH ----------------------------------
+
+
+(define-struct fwf-infer ()
+  #:methods gen:data-infer
+  [(define (matched-by? inf path) #f)
+   (define (infer-options inf)
+     '())])
+
+#|
+ header-row :  number = number of rows to use for header
+               #f = none, use numbers
+               #t = 1
+               (list <string> ...)
+|#
+(struct fwf-access ([header #:auto] [field-names #:auto] [skip-rows #:auto])
+  #:transparent #:mutable
+  #:methods gen:data-access
+  [(define (da-options da) (list HEADER-OPT SKIP-ROWS-OPT))
+   
+   (define (da-get-option da k)
+     (cond
+       [(string=? k HEADER-OPT)
+        (if (fwf-access-field-names da)
+            (string-join (fwf-access-field-names da) ",")
+            (fwf-access-header da))]
+       [(string=? k SKIP-ROWS-OPT)
+        (or (fwf-access-skip-rows da) 0)]       
+       [else #f]))
+   
+   (define (da-set-option! da k v)
+     (cond
+       [(string=? k HEADER-OPT)
+        (cond [(nonnegative-integer? v) (set-fwf-access-header! da v)]
+              [(boolean? v) (set-fwf-access-header! da v)]
+              [(and (list? v) (andmap string? v)) (set-fwf-access-header! da v)
+                                                  (set-fwf-access-field-names! da v)]
+              [else (raise-arguments-error 'set-option "header value must be provided as a number, boolean, or a list of strings" "value" v)])]
+       [(string=? k SKIP-ROWS-OPT)
+        (cond [(nonnegative-integer? v) (set-fwf-access-skip-rows! da v)]
+              [(and (string? v) (string->number v) (nonnegative-integer? (string->number v))) (set-fwf-access-skip-rows! da (string->number v))]
+              [else (raise-arguments-error 'set-option "skip-rows value must be a non-negative integer" "value" v)])]       
+       [else (void)]))
+   
+   (define (da-load-data da fp [enc #f])
+         (parameterize ([current-locale (if enc enc (current-locale))])
+           (fwf->jsexpr da fp)))])
+
+
+(define (fwf->jsexpr fwf-acc fp)
+  ;(define byts (port->bytes fp))
+  ;(close-input-port fp)
+  ;(with-input-from-bytes byts
+  ;  (lambda ()
+  ;    (define fp (current-input-port))
+  (define field-syms (and (fwf-access-field-names fwf-acc)
+                          (fix-headers (fwf-access-field-names fwf-acc))))
+  (define skip-rows (or (fwf-access-skip-rows fwf-acc) 0))
+
+  (define fwf-data (run-on-file fp skip-rows))
+  (define raw-rows (fwf-data-frame fwf-data))
+
+  (define header-rows
+    (match (fwf-access-header fwf-acc)
+      [(? nonnegative-integer? v) v]
+      [#f 0]
+      [#t 1]
+      [_ 0]))
+  
+  (define headers
+    (cond
+      [field-syms field-syms]
+      [(zero? header-rows)    ; generate col-... labels
+       (fix-headers (for/list ([x (fwf-final-groups fwf-data)]) ""))]
+      [(nonnegative-integer? header-rows)
+       (fix-headers (merge-header-rows (take raw-rows header-rows)))]
+      [else (error 'fwf->jsexpr "unknown header value: ~a" header-rows)]))
+    
+  (define rows (drop raw-rows header-rows))
+
+  ;(display headers)(newline)
+  ;(display rows)(newline)
+
+  (for/list ([row rows])
+    (for/hasheq ([cell row]
+                 [key  headers])
+      (values key (string->num/bool/try cell)))))
+
+
+;; : (listof (listof string)) -> (listof string)
+
+(module+ test
+  (check-expect (merge-header-rows '(("ab" "c" "defg" "hij")))
+                '("ab" "c" "defg" "hij"))
+  (check-expect (merge-header-rows '((""   "c"    "" "hij" "boo" "" "")
+                                     ("ab" "hello" "bye" "" "yah" "bye" "")))
+                '("ab" "c-hello" "bye" "hij" "boo-yah" "bye" "")))
+
+(define (merge-header-rows rows)
+  (apply map merge-labels rows))
+
+(define (merge-labels . lst)
+  (string-join (filter (λ(s) (not (string=? "" s))) lst) "-"))
+
 ;; ------  CSV ------------------------------------------
 ;; ------  CSV ------------------------------------------
 ;; ------  CSV ------------------------------------------
@@ -531,22 +648,43 @@ based on whether the path name contains .csv or .tsv).
 
 
 ;; listof-string -> listof-symbol
+(module+ test
+  (check-expect (fix-headers '("ab/c" "   de" "f" "ghij"))
+                '(ab-c de f ghij))
+  (check-expect (fix-headers '("" "" "ab"))
+                '(col-0 col-1 ab))
+  (check-expect (fix-headers '("" "ab" "cd" "ab"))
+                '(col-0 ab-0 cd ab-1)))
+
 (define (fix-headers los)
+  (define max-digs (inexact->exact (ceiling (/ (log (length los)) (log 10)))))
   (for/list ([s los]
              [i (in-naturals)])
     (define s2 (replace-slash+trim s))
     (define s3 (if (string=? "" s2)
-                   (format "col-~a" i)
+                   (format "col-~a" (~a i #:width max-digs #:align 'right #:pad-string "0"))
                    s2))
     (string->symbol s3)))
 
 
+(module+ test
+  (check-expect (string->num/bool/try "abc") "abc")
+  (check-expect (string->num/bool/try "2441A") "2441A")
+  (check-expect (string->num/bool/try "2413") 2413)
+  (check-expect (string->num/bool/try "true") #t)
+  (check-expect (string->num/bool/try "25,452,414") 25452414)
+  (check-expect (string->num/bool/try "06517") "06517"))
+
 (define (string->num/bool/try s)
-  (cond
-    [(string? s)
-     (define as-num (string->number s))
-     (or as-num (string->boolean/try s))]
-    [else s]))
+  (if (not (string? s))
+      s
+      (cond
+        [(regexp-match #px"^\\d{1,3}(,\\d{3})*(\\.\\d+)?$" s)
+         (string->number (string-replace s "," ""))]
+        [(regexp-match #px"^0\\d+" s) s]   ; starts with 0 and only digits after that
+        [else
+         (define as-num (string->number s))
+         (or as-num (string->boolean/try s))])))
 
 
 ;; string -> boolean or string
@@ -559,4 +697,6 @@ based on whether the path name contains .csv or .tsv).
 
 
 
+(module+ test
+  (test))
 

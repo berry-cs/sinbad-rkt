@@ -366,12 +366,17 @@
 
 
 
-(define (run-on-file input-file-name-or-port)
-  (define DATA-1 (filter-blank (if (path-string? input-file-name-or-port)
-                                   (port->lines (open-input-file input-file-name-or-port))
-                                   (port->lines input-file-name-or-port))))
+(define (run-on-file input-file-name-or-port [skip-rows 0])
+  ;(displayln (list 'inp input-file-name-or-port))
+  (define DATA-1 (filter-blank (drop
+                                (if (path-string? input-file-name-or-port)
+                                    (port->lines (open-input-file input-file-name-or-port))
+                                    (port->lines input-file-name-or-port))
+                                skip-rows)))
   (define SAMPLE-1 (take DATA-1 (min 100 (length DATA-1))))
   (define PARSE-1 (parse-fixed-width SAMPLE-1))
+
+  
 
   #|
     (matrix->bitmap (lines->e-matrix SAMPLE-1))
@@ -389,33 +394,40 @@
               DATA-1)))
   (define PARSED-LINES (map (λ(line) (map string-trim (apply-groups (fwf-final-groups PARSE-1) line)))
                        CONSISTENT-ONLY))
+
+  ;(displayln (list 'data DATA-1))
+  ;(displayln (list 'parsed PARSED-LINES))
   
   ;(fwf-final-groups PARSE-1)
   ;(apply-groups (fwf-final-groups PARSE-1) (list-ref DATA-1 20))
-  (write-csv "output.csv" PARSE-1 CONSISTENT-ONLY)
+  ;(write-csv "output.csv" PARSE-1 CONSISTENT-ONLY)
   
   (struct-copy fwf PARSE-1 [data-frame PARSED-LINES]))
 
 
-(define R1 (run-on-file "est16-ga.txt"))
-(define R2 (run-on-file "ssamatab2.txt"))
+ 
 
-(module+ test
-  (check-expect (length (fwf-final-groups R1)) 27)
-  (check-expect (length (fwf-final-groups R2)) 10))
+(module+ test-disable
+  
+  (define R1 (run-on-file "est16-ga.txt"))
+  (define R2 (run-on-file "ssamatab2.txt"))
+  
+ ; (check-expect (length (fwf-final-groups R1)) 27)
+ ; (check-expect (length (fwf-final-groups R2)) 10)
 
-(define LINES1 (read-lines "est16-ga.txt"))
-(define BREAKS1 (map (λ(line) (count-inconsistent-breaks (fwf-final-groups R1) line)) LINES1))
-(define CONSISTENT-ONLY1
+  (define LINES1 (read-lines "est16-ga.txt"))
+  (define BREAKS1 (map (λ(line) (count-inconsistent-breaks (fwf-final-groups R1) line)) LINES1))
+  (define CONSISTENT-ONLY1
     (let ([threshold (quotient (length (fwf-final-groups R1)) 10)])
       (filter (λ(line) (<= (count-inconsistent-breaks (fwf-final-groups R1) line) threshold))
               LINES1)))
-(define PARSED1 (map (λ(line) (map string-trim (apply-groups (fwf-final-groups R1) line)))
-                     CONSISTENT-ONLY1))
+  (define PARSED1 (map (λ(line) (map string-trim (apply-groups (fwf-final-groups R1) line)))
+                       CONSISTENT-ONLY1))
 
-(define LINES2 (read-lines "ssamatab2.txt"))
-(define BREAKS2 (map (λ(line) (count-inconsistent-breaks (fwf-final-groups R2) line)) LINES2))
+  (define LINES2 (read-lines "ssamatab2.txt"))
+  (define BREAKS2 (map (λ(line) (count-inconsistent-breaks (fwf-final-groups R2) line)) LINES2))
 
+  )
 
 (module+ test (test))
 

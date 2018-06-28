@@ -11,7 +11,6 @@
          sinbad/dot-printer
          sinbad/plugin
          sinbad/util)
-(require "fwf-parse.rkt")
 
 (module+ test
   (require rackunit))
@@ -41,7 +40,9 @@
         (hasheq 'name "XML (ssax built-in)" 'type-ext "xml"
                 'data-infer (xml-infer) 'data-factory xml-access)
         (hasheq 'name "CSV (built-in)" 'type-ext "csv"
-                'data-infer (csv-infer #f) 'data-factory csv-access)))
+                'data-infer (csv-infer #f) 'data-factory csv-access)
+        (hasheq 'name "Fixed-width fields (built-in)" 'type-ext "fwf"
+                'data-infer (fwf-infer) 'data-factory fwf-access)))
 
 
 (define (connect path #:format [data-format #f])
