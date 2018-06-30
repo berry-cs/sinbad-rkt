@@ -360,16 +360,6 @@ based on whether the path name contains .csv or .tsv).
        dict])))
 
 (define (h->l x)
-    (if (hash? x)
-        (for/list ([(k v) (in-dict x)])
-          (if (list? v)
-              (cons k (map h->l v))
-              (cons k (h->l v))))
-        x))
-
-(define (xtest str)
-  ;(printf "------- Testing: ~a~n" str)
-
   (define (pair<=? p1 p2)
     (string<=? (symbol->string (car p1)) (symbol->string (car p2))))
   
@@ -378,9 +368,17 @@ based on whether the path name contains .csv or .tsv).
            (sort (map sort-pairs v) pair<=?)]
           [(list? v) (map sort-pairs v)]
           [else v]))
-  
+  (sort-pairs (if (hash? x)
+                  (for/list ([(k v) (in-dict x)])
+                    (if (list? v)
+                        (cons k (map h->l v))
+                        (cons k (h->l v))))
+                  x)))
+
+(define (xtest str)
+  ;(printf "------- Testing: ~a~n" str)
   (let ([result (ssax:xml->jsexpr (open-input-string str))])
-    (sort-pairs (h->l result))))
+     (h->l result)))
 
 ;(xtest "<zippy><pippy pigtails=\"2\">ab duh</pippy>cd hi <no /></zippy>")
 
