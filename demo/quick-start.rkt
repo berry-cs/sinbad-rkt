@@ -116,6 +116,7 @@ exploring
 ; failed to load data: Specify a file-entry from the ZIP file: (Kickstarter010.csv Kickstarter012.csv Kickstarter002.csv Kickstarter006.csv Kickstarter003.csv Kickstarter011.csv Kickstarter013.csv Kickstarter004.csv Kickstarter008.csv Kickstarter009.csv Kickstarter.csv Kickstarter007.csv Kickstarter005.csv Kickstarter001.csv)
 
 
+#;
 (define ks/zip
   (sail-to "https://s3.amazonaws.com/weruns/forfun/Kickstarter/Kickstarter_2015-10-22T09_57_48_703Z.zip"
            (load)
@@ -123,6 +124,7 @@ exploring
            (option "file-entry" "Kickstarter003.csv")
            (manifest)))
 
+#;
 (string-length (first (fetch ks/zip "projects")))   ; --- huge!
 
 
@@ -146,7 +148,7 @@ exploring
            (format "csv")
            (param "downloadformat" "csv")
            (option "skip-rows" "4")
-           (option "file-entry" "API_PER_DS2_en_csv_v2.csv")
+           (option "file-entry" "API_PER_DS2_en_csv_v2_10136622.csv")
            (load)
            (manifest)))
 
@@ -156,7 +158,7 @@ exploring
            (param "downloadformat" "csv")
            (option "skip-rows" "5")
            (option "header" "Country,CCode,Indicator,ICode,year60,year61,year62,year63,year64,year65,year66,year67,year68,year69,year70,year71,year72,year73,year74,year75,year76,year77,year78,year79,year80,year81,year82,year83,year84,year85,year86,year87,year88,year89,year90,year91,year92,year93,year94,year95,year96,year97,year98,year99,year00,year01,year02,year03,year04,year05,year06,year07,year08,year09,year10,year11,year12,year13,year14,year15,year16")
-           (option "file-entry" "API_PER_DS2_en_csv_v2.csv")
+           (option "file-entry" "API_PER_DS2_en_csv_v2_10136622.csv")
            (load)
            (manifest)))
 

@@ -5,14 +5,14 @@
 (require sinbad)
 
 (define faa
-  (sail-to (string-append "http://services.faa.gov/airport/status/ATL")
-           (format "xml")
-           (param "format" "application/xml")
+  (sail-to (string-append "https://soa.smext.faa.gov/asws/api/airport/status/ATL")
+           (format "json")
+           (param "format" "application/json")
            ;(cache-timeout 300)  ; refresh every 5 minutes
            (load)))
 
 (define-struct port (name loc condition delay?))
 
-(fetch faa (make-port "Name" "State" "Weather/Weather" "Delay"))
+(fetch faa (make-port "Name" "State" "Weather/Weather/Temp" "Delay"))
 
 (manifest faa)

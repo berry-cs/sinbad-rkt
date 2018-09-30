@@ -578,7 +578,9 @@
       this)
 
     (define/public (set-param! name value)
-      (set! param-values (hash-set param-values (if (string? name) (string->symbol name) name) value))
+      (set! param-values (hash-set param-values
+                                   (if (string? name) (string->symbol name) name)
+                                   (~a value)))
       this)
 
     (define/public (add-param! prm)
@@ -670,6 +672,13 @@ sig :=    (list <sig>)
     ;; real-unify : jsexpr sig [integer? or #f or 'random or (list integer? ...)] boolean -> (list any)
 
     (define (real-unify data sig select as-list?)
+      (dprintf "in real-unify: ~a ~a ~a~n~a~n-----~n" sig select as-list? data)
+
+      (define (unwrap-singleton v)
+        (if (and (list? v) (= (length v) 1))
+            (unwrap-singleton (first v))
+            v))
+      
       (define upd-select   ; "use-up" the select index
         (match select
           [(list x) #f]
@@ -686,7 +695,7 @@ sig :=    (list <sig>)
                 (flatten (map (λ(d) (real-unify d sig select as-list?)) ds))
                 (real-unify (apply-select ds select) sig upd-select as-list?))]
            [(? dict? _)
-            (define p-unif (map (λ (s) (real-unify data s select as-list?)) ss))
+            (define p-unif (map (λ (s) (unwrap-singleton (real-unify data s select as-list?))) ss))
             (apply f p-unif) ]
            [(? false? _) #f])]
 
@@ -730,7 +739,7 @@ sig :=    (list <sig>)
          
          (cond [(false? p-data) #f]
                [(cons? ps) (real-unify p-data (append (cons 'path ps) (list s)) select as-list?)]
-               [else (real-unify p-data s select as-list?)])]
+               [else (flatten (real-unify p-data s select as-list?))])]
 
 
         [(list 'value v) v]
@@ -759,7 +768,7 @@ sig :=    (list <sig>)
                             (if select (apply-select r select) r))]
              [(? list? _) (if select
                               (real-unify (apply-select data select) sig upd-select as-list?)
-                              (map (λ (d) (real-unify d sig select as-list?)) data))]
+                              (flatten (map (λ (d) (real-unify d sig select as-list?)) data)))]
              [else (sinbad-error "not primitive data")]))
          result]
 
@@ -850,6 +859,7 @@ sig :=    (list <sig>)
 
 ;; build-sig : boolean proc? (listof <path-string>) [(listof <sig>)] -> <sig>
 (define (build-sig as-list? func base-path . field-paths)
+  (dprintf "in build-sig ~a ~a ~a ~a~n" as-list? func base-path field-paths)
   (define func-default? (and (symbol? func) (eq? func 'dict)))
   
   (define sig

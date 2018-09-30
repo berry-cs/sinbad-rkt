@@ -32,8 +32,11 @@
                                                            "colors")))))))
        (field-list D)))
 
+(define (list-wrap d)
+  (if (list? d) d (list d)))
+
 ;; how many cards total?
-(length (apply append (map set-cards data*)))    ; 34,000+ !
+(length (apply append (map (compose list-wrap set-cards) data*)))    ; 34,000+ !
 
 
 
