@@ -1,7 +1,8 @@
 #lang racket
 
 (require file/gunzip
-         net/url)
+         net/url
+         "ftp-fetch.rkt")
 
 (provide smells-like-url?
          smells-like-gzip?
@@ -17,10 +18,30 @@
 (define (smells-like-url? p)
   ;;     Currently, only things that start off http://
   ;;     https:// or ftp:// are treated as URLs.
-  (and (string? p)
-       (string-contains? p "://")
-       (or (string-prefix? p "http")
-           (string-prefix? p "ftp"))))
+  (or (is-http-url? p) (is-ftp-url? p)))
+
+(module+ test
+  (check-equal? (is-http-url? "https://www.noaa.gov/hi.txt") true)
+  (check-equal? (is-http-url? "http://web.com/hi.txt") true)
+  (check-equal? (is-http-url? "https://data.berry.edu/long/path-something/x.csv") true)
+  (check-equal? (is-http-url? "ftp://www.noaa.gov/hi.txt") false)
+  (check-equal? (is-http-url? "file:data.berry.edu/long/path-something/x.csv") false)
+  
+  (check-equal? (is-ftp-url? "https://www.noaa.gov/hi.txt") false)
+  (check-equal? (is-ftp-url? "http://web.com/hi.txt") false)
+  (check-equal? (is-ftp-url? "https://data.berry.edu/long/path-something/x.csv") false)
+  (check-equal? (is-ftp-url? "ftp://www.noaa.gov/hi.txt") true)
+  (check-equal? (is-ftp-url? "file:data.berry.edu/long/path-something/x.csv") false))
+
+(define (is-http-url? p)
+  (and (regexp-match url-regexp p)
+       (member (url-scheme (string->url p)) '("http" "https"))
+       true))
+
+(define (is-ftp-url? p)
+  (and (regexp-match url-regexp p)
+       (member (url-scheme (string->url p)) '("ftp"))
+       true))
 
 
 (define (smells-like-gzip? p)
@@ -80,7 +101,10 @@
     (cond
       [(or (not path)
            (not (string? path))) #f]
-      [(smells-like-url? path)
+      [(is-ftp-url? path)
+       (define local-file-path (ftp-fetch path))
+       (open-input-file local-file-path)]
+      [(is-http-url? path)
        (define-values (ip hdrs) (get-port+headers/follow-redirects path))
        (for ([h (string-split hdrs #px"[\r\n]")])
          (define R1 (regexp-match #px"^[Cc]ontent-[Dd]isposition.*filename=\"?([^\\s\"]*)\"?" h))
