@@ -384,7 +384,7 @@ based on whether the path name contains .csv or .tsv).
 
 
 (module+ test
-  (require rackunit)
+  (require (except-in rackunit check-within))
 
   )
 
