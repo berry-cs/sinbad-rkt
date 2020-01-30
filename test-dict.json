@@ -1,0 +1,5 @@
+{"name": "Mona",
+ "age": 7,
+ "country" : "Ecuador",
+ "address" :  { "number" : 100, "street" : "main st" } 
+}

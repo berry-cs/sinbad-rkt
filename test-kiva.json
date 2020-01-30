@@ -1,0 +1,96 @@
+{
+  "data": {
+    "lend": {
+      "loans": {
+        "totalCount": 809,
+        "values": [
+          {
+            "name": "Mona",
+            "loanAmount": "10000.00",
+            "activity": {
+              "name": "Restaurant"
+            },
+            "geocode": {
+              "country": {
+                "isoCode": "US",
+                "name": "United States"
+              }
+            },
+            "lenders": {
+              "totalCount": 27
+            },
+            "trusteeName": "Christian Damiba"
+          },
+          {
+            "name": "Raquel",
+            "loanAmount": "4000.00",
+            "activity": {
+              "name": "Services"
+            },
+            "geocode": {
+              "country": {
+                "isoCode": "US",
+                "name": "United States"
+              }
+            },
+            "lenders": {
+              "totalCount": 62
+            },
+            "trusteeName": "No Trustee Endorsement"
+          },
+          {
+            "name": "Reginah",
+            "loanAmount": "700.00",
+            "activity": {
+              "name": "Farming"
+            },
+            "geocode": {
+              "country": {
+                "isoCode": "KE",
+                "name": "Kenya"
+              }
+            },
+            "lenders": {
+              "totalCount": 13
+            },
+            "partnerName": "Juhudi Kilimo"
+          },
+          {
+            "name": "Irene's Group",
+            "loanAmount": "1200.00",
+            "activity": {
+              "name": "Farming"
+            },
+            "geocode": {
+              "country": {
+                "isoCode": "KE",
+                "name": "Kenya"
+              }
+            },
+            "lenders": {
+              "totalCount": 48
+            },
+            "partnerName": "One Acre Fund"
+          },
+          {
+            "name": "Agnes",
+            "loanAmount": "700.00",
+            "activity": {
+              "name": "Farming"
+            },
+            "geocode": {
+              "country": {
+                "isoCode": "KE",
+                "name": "Kenya"
+              }
+            },
+            "lenders": {
+              "totalCount": 6
+            },
+            "partnerName": "Juhudi Kilimo"
+          }
+        ]
+      }
+    }
+  }
+}

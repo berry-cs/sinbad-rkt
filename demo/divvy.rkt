@@ -5,6 +5,7 @@
 
 (require sinbad)
 
+#|
 (define divvy-live
   (sail-to "https://feeds.divvybikes.com/stations/stations.json"
            (manifest)
@@ -20,7 +21,7 @@
   (fetch divvy-live "stationName" "availableBikes" "availableDocks" "status"
                 (base-path "stationBeanList")))
 
-
+|#
 
 
 

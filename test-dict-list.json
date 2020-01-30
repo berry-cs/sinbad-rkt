@@ -1,0 +1,17 @@
+[
+{"name": "Mona",
+ "age": 7,
+ "country" : "Ecuador",
+ "address" :  { "number" : 100, "street" : "main st" } 
+},
+{"name": "Jim",
+ "age": 10,
+ "country" : "Argentina",
+ "address" :  { "number" : 200, "street" : "broad st" } 
+},
+{"name": "Alice",
+ "age": 17,
+ "country" : "Spain",
+ "address" :  { "number" : 500, "street" : "center ave" } 
+}
+]

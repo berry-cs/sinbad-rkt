@@ -4,6 +4,7 @@
   (require test-engine/racket-tests))
 
 (provide run-on-file
+         matrix->bitmap
          (struct-out fwf))
 
 (require 2htdp/batch-io)

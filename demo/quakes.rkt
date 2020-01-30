@@ -1,6 +1,7 @@
 #lang racket
 
 (require sinbad)
+(require racket/date)
 
 (define-struct quake (title time mag) #:transparent)
 

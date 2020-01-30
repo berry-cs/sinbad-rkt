@@ -439,8 +439,13 @@
                          (cons 'path splitted))]
                     [else fp])) field-paths-suf))
 
+         (define as-list? (and (not select)
+                               (or
+                                (string? (first field-paths-split))
+                                (> (length field-paths-split) 1))))
+
          (define final-sig
-           (apply build-sig (not select) func base-path-fields field-paths-split))
+           (apply build-sig as-list? func base-path-fields field-paths-split))
          (dprintf "final-sig: ~s~n" final-sig)
          (parameterize ([invalid-fields-reported (map string->symbol ignore-error-fields)])
            (real-unify (fetch-all) final-sig select #f))])))
@@ -665,19 +670,33 @@
 sig :=    (list <sig>)
      |    (list <function> <sig> ...)
      |    (list 'dict (<name> <sig>) ...)
-     |    (list 'path <sig>)
+     |    (list 'path <string> ... <sig>)
      |    <path-string>
+     |    (list 'value v)
 |#
 
     ;; real-unify : jsexpr sig [integer? or #f or 'random or (list integer? ...)] boolean -> (list any)
 
     (define (real-unify data sig select as-list?)
-      (dprintf "in real-unify: ~a ~a ~a~n~a~n-----~n" sig select as-list? data)
+      (dprintf "in real-unify: ~a ~a ~a~n~a~n-----~n" sig select as-list?
+              (substring (format "~a" data) 0 (min 40 (string-length (format "~a" data)))))
 
       (define (unwrap-singleton v)
         (if (and (list? v) (= (length v) 1))
             (unwrap-singleton (first v))
             v))
+
+      (define (traverse data path)
+           (match data
+             [(? dict? _) (dict-ref/check data path)]
+             [(? list? _) (flatten (map (λ(d) (traverse d path)) data))]
+             [else
+              (unless (member path (invalid-fields-reported))
+                (if (invalid-fields-exception?)
+                    (error "warning: no path to ~a~n" path)
+                    (fprintf (current-error-port) "warning: no path to ~a~n" path))
+                (invalid-fields-reported (cons path (invalid-fields-reported))))
+              #f]))
       
       (define upd-select   ; "use-up" the select index
         (match select
@@ -690,24 +709,40 @@ sig :=    (list <sig>)
         [(list (? procedure? f) ss ...)
          (dprintf "apply ~a to:\n~a\n" (object-name f) ss)
          (match data
+           [(? false? _) (dprintf "R-proc-fail ") #f]
            [(list ds ...)
-            (if as-list?
-                (flatten (map (λ(d) (real-unify d sig select as-list?)) ds))
-                (real-unify (apply-select ds select) sig upd-select as-list?))]
-           [(? dict? _)
-            (define p-unif (map (λ (s) (unwrap-singleton (real-unify data s select as-list?))) ss))
-            (apply f p-unif) ]
-           [(? false? _) #f])]
+            (cond
+              [select
+               (dprintf "R-proc-list-1 ")
+               (real-unify (apply-select ds select) sig upd-select as-list?)]
+              [else
+               (dprintf "R-proc-list-2 ")
+               ((if as-list? identity unwrap-singleton)
+                (flatten (map (λ(d) (real-unify d sig select as-list?)) ds)))])]
+           [_  ; (? dict? _)
+            (dprintf "R-proc-any ")
+            ;; this shouldn't flatten the outer result, because the correct
+            ;; number of parameters to f needs to be preserved
+            (define p-unif
+               (map (λ (s) (real-unify data s select as-list?)) ss))
+            (apply f p-unif) ])]
 
     
         [(list 'dict ss ...)
          (dprintf "dict of ~a~n" ss)
          (match data
+           [(? false? _) #f]
            [(list ds ...)
-            (if as-list?
-                (flatten (map (λ(d) (real-unify d sig select as-list?)) ds))
-                (real-unify (apply-select ds select) sig upd-select as-list?))]
-           [(? dict? _)
+            (cond
+              [select
+               (dprintf "R-dict-list-1 ")
+               (real-unify (apply-select ds select) sig upd-select as-list?)]
+              [else
+               (dprintf "R-dict-list-2 ")
+               ((if as-list? identity unwrap-singleton)
+                (flatten (map (λ(d) (real-unify d sig select as-list?)) ds)))])]
+           [_ ; (? dict? _)
+            (dprintf "R-dict-any ")
             (define assocs (map (λ(sub)
                                   (define-values (n s)
                                     (match sub
@@ -716,31 +751,28 @@ sig :=    (list <sig>)
                                   (cons (if (symbol? n) n (string->symbol n))
                                         (real-unify data s select as-list?)))
                                 ss))
-            (make-hasheq assocs)]
-           [(? false? _) #f])]
+            (make-hasheq assocs)])]
 
     
         [(list 'path p ps ... s)
-         (dprintf "traverse ~a ~a~n" p ps)
-
-         (define (traverse data path)
-           (match data
-             [(? dict? _) (dict-ref/check data p)]
-             [(? list? _) (flatten (map (λ(d) (traverse d path)) data))]
-             [else
-              (unless (member p (invalid-fields-reported))
-                (if (invalid-fields-exception?)
-                    (error "warning: no path to ~a ~a~n" p ps)
-                    (fprintf (current-error-port) "warning: no path to ~a ~a~n" p ps))
-                (invalid-fields-reported (cons p (invalid-fields-reported))))
-              #f]))
+         (dprintf "traverse ~a ~a / ~a / ~a~n" p ps s (substring (format "~a" data) 0 (min 40 (string-length (format "~a" data)))))
+         (dprintf "R-path ")
 
          (define p-data (traverse data p))
-         
-         (cond [(false? p-data) #f]
-               [(cons? ps) (real-unify p-data (append (cons 'path ps) (list s)) select as-list?)]
-               [else (flatten (real-unify p-data s select as-list?))])]
 
+         (define result
+           (unwrap-singleton        
+            (cond [(false? p-data) #f]
+                  [(cons? ps) (real-unify p-data (append (cons 'path ps) (list s)) select as-list?)]
+                  [else (flatten (real-unify p-data s select as-list?))])))
+
+         (dprintf "p-data: ~a~nps: ~a~nresult: ~a~n"
+                 (substring (format "~a" p-data) 0 (min 40 (string-length (format "~a" p-data))))
+                 ps
+                 result)
+         
+         result]
+        
 
         [(list 'value v) v]
 
@@ -750,27 +782,41 @@ sig :=    (list <sig>)
            (match data
              [(list ds ...)
               (dprintf "collecting list~n")
+              (dprintf "R-list-list ")
               (map (λ (d) (real-unify d s select #t)) ds)]
              [_
               (dprintf "wrapping list~n")
+              (dprintf "R-list-wrap ")
               (real-unify data s select #t)]))
          (if (and (cons? s) (eq? (car s) list))   ; don't flatten explicit (list ...) constructor requests
              result
              (flatten result))]
 
     
-        [(? string? p)
-         (dprintf "contents of ~a at ~a~n" p   (substring (format "~a" data) 0 (min 40 (string-length (format "~a" data)))))
+        [(? string? pth)
+         (dprintf "contents of ~a at ~a~n" pth   (substring (format "~a" data) 0 (min 40 (string-length (format "~a" data)))))
          (define result
            (match data
-             [(or (? string? _) (? boolean? _) (? number? _)) data]
-             [(? dict? _) (let ([r (dict-ref/check data p)])
-                            (if select (apply-select r select) r))]
-             [(? list? _) (if select
-                              (real-unify (apply-select data select) sig upd-select as-list?)
-                              (flatten (map (λ (d) (real-unify d sig select as-list?)) data)))]
-             [else (sinbad-error "not primitive data")]))
-         result]
+             [(or (? string? _) (? boolean? _) (? number? _))
+              (dprintf "R-label-prim ")
+              data]
+
+             ;;  note/TODO: I think the two below rules could be compressed to use
+             ;;   (traverse ...) and then apply the `select` if present...
+             ;;   need to make sure there are test cases for these though before refactoring!!
+             [(? dict? _)
+              (dprintf "R-label-dict ")
+              (let ([r (dict-ref/check data pth)])
+                (if select (apply-select r select) r))]
+             [(? list? _)
+              (dprintf "R-label-list ")
+              (if select
+                  (real-unify (apply-select data select) sig upd-select as-list?)
+                  (flatten (map (λ (d) (real-unify d sig select as-list?)) data)))]
+             [else
+              (traverse data pth)]))
+         (unwrap-singleton result)]
+        
 
         [_ (sinbad-error "unexpected error (invalid sig)")]))
 
@@ -910,7 +956,7 @@ sig :=    (list <sig>)
 
 
 
-
+;; jsexpr number -> string
 
 (define (json-describe thing [indent 0])
   (define indent-amount 2)
